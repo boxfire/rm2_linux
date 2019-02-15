@@ -281,5 +281,13 @@ config VMD
 	  To compile this driver as a module, choose M here: the
 	  module will be called vmd.
 
+config PCIE_MICROSEMI
+	bool "Microsemi AXI PCIe host bridge support"
+	depends on PCI_MSI && OF
+	help
+	  Say 'Y' here if you want kernel to support the Microsemi AXI PCIe
+	  Host Bridge driver.
+
+
 source "drivers/pci/controller/dwc/Kconfig"
 endmenu
