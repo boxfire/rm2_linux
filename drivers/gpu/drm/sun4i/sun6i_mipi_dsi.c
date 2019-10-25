@@ -1109,7 +1109,7 @@ static int sun6i_dsi_probe(struct platform_device *pdev)
 		return PTR_ERR(dsi->regulator);
 	}
 
-	dsi->regs = devm_regmap_init_mmio_clk(dev, "bus", base,
+	dsi->regs = devm_regmap_init_mmio_clk(dev, NULL, base,
 					      &sun6i_dsi_regmap_config);
 	if (IS_ERR(dsi->regs)) {
 		dev_err(dev, "Couldn't create the DSI encoder regmap\n");
@@ -1120,6 +1120,12 @@ static int sun6i_dsi_probe(struct platform_device *pdev)
 	if (IS_ERR(dsi->reset)) {
 		dev_err(dev, "Couldn't get our reset line\n");
 		return PTR_ERR(dsi->reset);
+	}
+
+	dsi->bus_clk = devm_clk_get(dev, NULL);
+	if (IS_ERR(dsi->bus_clk)) {
+		dev_err(dev, "Couldn't get the DSI bus clock\n");
+		return PTR_ERR(dsi->bus_clk);
 	}
 
 	if (dsi->variant->has_mod_clk) {
@@ -1196,6 +1202,7 @@ static int __maybe_unused sun6i_dsi_runtime_resume(struct device *dev)
 	}
 
 	reset_control_deassert(dsi->reset);
+	clk_prepare_enable(dsi->bus_clk);
 	if (dsi->variant->has_mod_clk)
 		clk_prepare_enable(dsi->mod_clk);
 
@@ -1227,6 +1234,7 @@ static int __maybe_unused sun6i_dsi_runtime_suspend(struct device *dev)
 
 	if (dsi->variant->has_mod_clk)
 		clk_disable_unprepare(dsi->mod_clk);
+	clk_disable_unprepare(dsi->bus_clk);
 	reset_control_assert(dsi->reset);
 	regulator_disable(dsi->regulator);
 
