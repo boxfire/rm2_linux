@@ -127,7 +127,7 @@ static const struct soc15_reg_golden golden_settings_gc_10_1[] =
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmTA_CNTL_AUX, 0xfff7ffff, 0x01030000),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmTCP_CNTL, 0x60000010, 0x479c0010),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmUTCL1_CGTT_CLK_CTRL, 0xfeff0fff, 0x40000100),
-	SOC15_REG_GOLDEN_VALUE(GC, 0, mmUTCL1_CTRL, 0x00800000, 0x00800000)
+	SOC15_REG_GOLDEN_VALUE(GC, 0, mmUTCL1_CTRL, 0x00c00000, 0x00c00000)
 };
 
 static const struct soc15_reg_golden golden_settings_gc_10_0_nv10[] =
@@ -171,7 +171,7 @@ static const struct soc15_reg_golden golden_settings_gc_10_1_1[] =
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmSQ_LDS_CLK_CTRL, 0xffffffff, 0xffffffff),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmTA_CNTL_AUX, 0xfff7ffff, 0x01030000),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmTCP_CNTL, 0x60000010, 0x479c0010),
-	SOC15_REG_GOLDEN_VALUE(GC, 0, mmUTCL1_CTRL, 0x00800000, 0x00800000),
+	SOC15_REG_GOLDEN_VALUE(GC, 0, mmUTCL1_CTRL, 0x00c00000, 0x00c00000),
 };
 
 static const struct soc15_reg_golden golden_settings_gc_10_1_2[] =
@@ -564,32 +564,6 @@ static void gfx_v10_0_free_microcode(struct amdgpu_device *adev)
 	kfree(adev->gfx.rlc.register_list_format);
 }
 
-static void gfx_v10_0_check_fw_write_wait(struct amdgpu_device *adev)
-{
-	adev->gfx.cp_fw_write_wait = false;
-
-	switch (adev->asic_type) {
-	case CHIP_NAVI10:
-	case CHIP_NAVI12:
-	case CHIP_NAVI14:
-		if ((adev->gfx.me_fw_version >= 0x00000046) &&
-		    (adev->gfx.me_feature_version >= 27) &&
-		    (adev->gfx.pfp_fw_version >= 0x00000068) &&
-		    (adev->gfx.pfp_feature_version >= 27) &&
-		    (adev->gfx.mec_fw_version >= 0x0000005b) &&
-		    (adev->gfx.mec_feature_version >= 27))
-			adev->gfx.cp_fw_write_wait = true;
-		break;
-	default:
-		break;
-	}
-
-	if (adev->gfx.cp_fw_write_wait == false)
-		DRM_WARN_ONCE("Warning: check cp_fw_version and update it to realize \
-			      GRBM requires 1-cycle delay in cp firmware\n");
-}
-
-
 static void gfx_v10_0_init_rlc_ext_microcode(struct amdgpu_device *adev)
 {
 	const struct rlc_firmware_header_v2_1 *rlc_hdr;
@@ -858,7 +832,6 @@ static int gfx_v10_0_init_microcode(struct amdgpu_device *adev)
 		}
 	}
 
-	gfx_v10_0_check_fw_write_wait(adev);
 out:
 	if (err) {
 		dev_err(adev->dev,
@@ -1469,7 +1442,7 @@ static int gfx_v10_0_sw_fini(void *handle)
 		amdgpu_ring_fini(&adev->gfx.compute_ring[i]);
 
 	amdgpu_gfx_mqd_sw_fini(adev);
-	amdgpu_gfx_kiq_free_ring(&adev->gfx.kiq.ring, &adev->gfx.kiq.irq);
+	amdgpu_gfx_kiq_free_ring(&adev->gfx.kiq.ring);
 	amdgpu_gfx_kiq_fini(adev);
 
 	gfx_v10_0_pfp_fini(adev);
@@ -2470,7 +2443,7 @@ static int gfx_v10_0_cp_gfx_load_pfp_microcode(struct amdgpu_device *adev)
 	}
 
 	if (amdgpu_emu_mode == 1)
-		adev->nbio_funcs->hdp_flush(adev, NULL);
+		adev->nbio.funcs->hdp_flush(adev, NULL);
 
 	tmp = RREG32_SOC15(GC, 0, mmCP_PFP_IC_BASE_CNTL);
 	tmp = REG_SET_FIELD(tmp, CP_PFP_IC_BASE_CNTL, VMID, 0);
@@ -2540,7 +2513,7 @@ static int gfx_v10_0_cp_gfx_load_ce_microcode(struct amdgpu_device *adev)
 	}
 
 	if (amdgpu_emu_mode == 1)
-		adev->nbio_funcs->hdp_flush(adev, NULL);
+		adev->nbio.funcs->hdp_flush(adev, NULL);
 
 	tmp = RREG32_SOC15(GC, 0, mmCP_CE_IC_BASE_CNTL);
 	tmp = REG_SET_FIELD(tmp, CP_CE_IC_BASE_CNTL, VMID, 0);
@@ -2609,7 +2582,7 @@ static int gfx_v10_0_cp_gfx_load_me_microcode(struct amdgpu_device *adev)
 	}
 
 	if (amdgpu_emu_mode == 1)
-		adev->nbio_funcs->hdp_flush(adev, NULL);
+		adev->nbio.funcs->hdp_flush(adev, NULL);
 
 	tmp = RREG32_SOC15(GC, 0, mmCP_ME_IC_BASE_CNTL);
 	tmp = REG_SET_FIELD(tmp, CP_ME_IC_BASE_CNTL, VMID, 0);
@@ -2930,7 +2903,7 @@ static int gfx_v10_0_cp_compute_load_microcode(struct amdgpu_device *adev)
 	}
 
 	if (amdgpu_emu_mode == 1)
-		adev->nbio_funcs->hdp_flush(adev, NULL);
+		adev->nbio.funcs->hdp_flush(adev, NULL);
 
 	tmp = RREG32_SOC15(GC, 0, mmCP_CPC_IC_BASE_CNTL);
 	tmp = REG_SET_FIELD(tmp, CP_CPC_IC_BASE_CNTL, CACHE_POLICY, 0);
@@ -3133,6 +3106,7 @@ static int gfx_v10_0_gfx_init_queue(struct amdgpu_ring *ring)
 			memcpy(mqd, adev->gfx.me.mqd_backup[AMDGPU_MAX_GFX_RINGS], sizeof(*mqd));
 		/* reset the ring */
 		ring->wptr = 0;
+		adev->wb.wb[ring->wptr_offs] = 0;
 		amdgpu_ring_clear_ring(ring);
 #ifdef BRING_UP_DEBUG
 		mutex_lock(&adev->srbm_mutex);
@@ -4384,7 +4358,7 @@ static void gfx_v10_0_ring_emit_hdp_flush(struct amdgpu_ring *ring)
 {
 	struct amdgpu_device *adev = ring->adev;
 	u32 ref_and_mask, reg_mem_engine;
-	const struct nbio_hdp_flush_reg *nbio_hf_reg = adev->nbio_funcs->hdp_flush_reg;
+	const struct nbio_hdp_flush_reg *nbio_hf_reg = adev->nbio.hdp_flush_reg;
 
 	if (ring->funcs->type == AMDGPU_RING_TYPE_COMPUTE) {
 		switch (ring->me) {
@@ -4404,8 +4378,8 @@ static void gfx_v10_0_ring_emit_hdp_flush(struct amdgpu_ring *ring)
 	}
 
 	gfx_v10_0_wait_reg_mem(ring, reg_mem_engine, 0, 1,
-			       adev->nbio_funcs->get_hdp_flush_req_offset(adev),
-			       adev->nbio_funcs->get_hdp_flush_done_offset(adev),
+			       adev->nbio.funcs->get_hdp_flush_req_offset(adev),
+			       adev->nbio.funcs->get_hdp_flush_done_offset(adev),
 			       ref_and_mask, ref_and_mask, 0x20);
 }
 
@@ -4790,24 +4764,6 @@ static void gfx_v10_0_ring_emit_reg_wait(struct amdgpu_ring *ring, uint32_t reg,
 					uint32_t val, uint32_t mask)
 {
 	gfx_v10_0_wait_reg_mem(ring, 0, 0, 0, reg, 0, val, mask, 0x20);
-}
-
-static void gfx_v10_0_ring_emit_reg_write_reg_wait(struct amdgpu_ring *ring,
-						   uint32_t reg0, uint32_t reg1,
-						   uint32_t ref, uint32_t mask)
-{
-	int usepfp = (ring->funcs->type == AMDGPU_RING_TYPE_GFX);
-	struct amdgpu_device *adev = ring->adev;
-	bool fw_version_ok = false;
-
-	fw_version_ok = adev->gfx.cp_fw_write_wait;
-
-	if (fw_version_ok)
-		gfx_v10_0_wait_reg_mem(ring, usepfp, 0, 1, reg0, reg1,
-				       ref, mask, 0x20);
-	else
-		amdgpu_ring_emit_reg_write_reg_wait_helper(ring, reg0, reg1,
-							   ref, mask);
 }
 
 static void
@@ -5200,7 +5156,6 @@ static const struct amdgpu_ring_funcs gfx_v10_0_ring_funcs_gfx = {
 	.emit_tmz = gfx_v10_0_ring_emit_tmz,
 	.emit_wreg = gfx_v10_0_ring_emit_wreg,
 	.emit_reg_wait = gfx_v10_0_ring_emit_reg_wait,
-	.emit_reg_write_reg_wait = gfx_v10_0_ring_emit_reg_write_reg_wait,
 };
 
 static const struct amdgpu_ring_funcs gfx_v10_0_ring_funcs_compute = {
@@ -5234,7 +5189,6 @@ static const struct amdgpu_ring_funcs gfx_v10_0_ring_funcs_compute = {
 	.pad_ib = amdgpu_ring_generic_pad_ib,
 	.emit_wreg = gfx_v10_0_ring_emit_wreg,
 	.emit_reg_wait = gfx_v10_0_ring_emit_reg_wait,
-	.emit_reg_write_reg_wait = gfx_v10_0_ring_emit_reg_write_reg_wait,
 };
 
 static const struct amdgpu_ring_funcs gfx_v10_0_ring_funcs_kiq = {
@@ -5265,7 +5219,6 @@ static const struct amdgpu_ring_funcs gfx_v10_0_ring_funcs_kiq = {
 	.emit_rreg = gfx_v10_0_ring_emit_rreg,
 	.emit_wreg = gfx_v10_0_ring_emit_wreg,
 	.emit_reg_wait = gfx_v10_0_ring_emit_reg_wait,
-	.emit_reg_write_reg_wait = gfx_v10_0_ring_emit_reg_write_reg_wait,
 };
 
 static void gfx_v10_0_set_ring_funcs(struct amdgpu_device *adev)
@@ -5331,15 +5284,12 @@ static void gfx_v10_0_set_rlc_funcs(struct amdgpu_device *adev)
 
 static void gfx_v10_0_set_gds_init(struct amdgpu_device *adev)
 {
-	/* init asic gds info */
-	switch (adev->asic_type) {
-	case CHIP_NAVI10:
-	default:
-		adev->gds.gds_size = 0x10000;
-		adev->gds.gds_compute_max_wave_id = 0x4ff;
-		break;
-	}
+	unsigned total_cu = adev->gfx.config.max_cu_per_sh *
+			    adev->gfx.config.max_sh_per_se *
+			    adev->gfx.config.max_shader_engines;
 
+	adev->gds.gds_size = 0x10000;
+	adev->gds.gds_compute_max_wave_id = total_cu * 32 - 1;
 	adev->gds.gws_size = 64;
 	adev->gds.oa_size = 16;
 }

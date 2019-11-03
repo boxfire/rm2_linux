@@ -224,9 +224,9 @@ static size_t get_pgsize(u64 addr, size_t size)
 	return SZ_2M;
 }
 
-static void panfrost_mmu_flush_range(struct panfrost_device *pfdev,
-				     struct panfrost_mmu *mmu,
-				     u64 iova, size_t size)
+void panfrost_mmu_flush_range(struct panfrost_device *pfdev,
+			      struct panfrost_mmu *mmu,
+			      u64 iova, size_t size)
 {
 	if (mmu->as < 0)
 		return;
@@ -406,11 +406,11 @@ addr_to_drm_mm_node(struct panfrost_device *pfdev, int as, u64 addr)
 	spin_lock(&pfdev->as_lock);
 	list_for_each_entry(mmu, &pfdev->as_lru_list, list) {
 		if (as == mmu->as)
-			goto found_mmu;
+			break;
 	}
-	goto out;
+	if (as != mmu->as)
+		goto out;
 
-found_mmu:
 	priv = container_of(mmu, struct panfrost_file_priv, mmu);
 
 	spin_lock(&priv->mm_lock);
@@ -432,8 +432,7 @@ out:
 
 #define NUM_FAULT_PAGES (SZ_2M / PAGE_SIZE)
 
-static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
-				       u64 addr)
+int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as, u64 addr)
 {
 	int ret, i;
 	struct panfrost_gem_object *bo;
