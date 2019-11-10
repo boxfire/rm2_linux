@@ -289,14 +289,14 @@
 &uart2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart2_pins>;
-	status = "disabled";
+	status = "okay";
 };
 
 /* On Euler connector */
 &uart3 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart3_pins>;
-	status = "disabled";
+	status = "okay";
 };
 
 /* On Euler connector, RTS/CTS optional */
