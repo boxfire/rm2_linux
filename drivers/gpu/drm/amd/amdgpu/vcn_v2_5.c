@@ -25,7 +25,6 @@
 
 #include "amdgpu.h"
 #include "amdgpu_vcn.h"
-#include "amdgpu_pm.h"
 #include "soc15.h"
 #include "soc15d.h"
 #include "vcn_v2_0.h"
@@ -256,24 +255,32 @@ static int vcn_v2_5_hw_init(void *handle)
 			continue;
 		ring = &adev->vcn.inst[j].ring_dec;
 
-		adev->nbio.funcs->vcn_doorbell_range(adev, ring->use_doorbell,
+		adev->nbio_funcs->vcn_doorbell_range(adev, ring->use_doorbell,
 						     ring->doorbell_index, j);
 
-		r = amdgpu_ring_test_helper(ring);
-		if (r)
+		r = amdgpu_ring_test_ring(ring);
+		if (r) {
+			ring->sched.ready = false;
 			goto done;
+		}
 
 		for (i = 0; i < adev->vcn.num_enc_rings; ++i) {
 			ring = &adev->vcn.inst[j].ring_enc[i];
-			r = amdgpu_ring_test_helper(ring);
-			if (r)
+			ring->sched.ready = false;
+			continue;
+			r = amdgpu_ring_test_ring(ring);
+			if (r) {
+				ring->sched.ready = false;
 				goto done;
+			}
 		}
 
 		ring = &adev->vcn.inst[j].ring_jpeg;
-		r = amdgpu_ring_test_helper(ring);
-		if (r)
+		r = amdgpu_ring_test_ring(ring);
+		if (r) {
+			ring->sched.ready = false;
 			goto done;
+		}
 	}
 done:
 	if (!r)
@@ -416,6 +423,7 @@ static void vcn_v2_5_mc_resume(struct amdgpu_device *adev)
  * vcn_v2_5_disable_clock_gating - disable VCN clock gating
  *
  * @adev: amdgpu_device pointer
+ * @sw: enable SW clock gating
  *
  * Disable clock gating for VCN block
  */
@@ -534,6 +542,7 @@ static void vcn_v2_5_disable_clock_gating(struct amdgpu_device *adev)
  * vcn_v2_5_enable_clock_gating - enable VCN clock gating
  *
  * @adev: amdgpu_device pointer
+ * @sw: enable SW clock gating
  *
  * Enable clock gating for VCN block
  */
@@ -706,9 +715,6 @@ static int vcn_v2_5_start(struct amdgpu_device *adev)
 	struct amdgpu_ring *ring;
 	uint32_t rb_bufsz, tmp;
 	int i, j, k, r;
-
-	if (adev->pm.dpm_enabled)
-		amdgpu_dpm_enable_uvd(adev, true);
 
 	for (i = 0; i < adev->vcn.num_vcn_inst; ++i) {
 		if (adev->vcn.harvest_config & (1 << i))
@@ -939,9 +945,6 @@ static int vcn_v2_5_stop(struct amdgpu_device *adev)
 			UVD_POWER_STATUS__UVD_POWER_STATUS_MASK,
 			~UVD_POWER_STATUS__UVD_POWER_STATUS_MASK);
 	}
-
-	if (adev->pm.dpm_enabled)
-		amdgpu_dpm_enable_uvd(adev, false);
 
 	return 0;
 }

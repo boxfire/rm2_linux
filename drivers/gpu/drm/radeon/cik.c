@@ -221,7 +221,9 @@ int ci_get_temp(struct radeon_device *rdev)
 	else
 		actual_temp = temp & 0x1ff;
 
-	return actual_temp * 1000;
+	actual_temp = actual_temp * 1000;
+
+	return actual_temp;
 }
 
 /* get temperature in millidegrees */
@@ -237,7 +239,9 @@ int kv_get_temp(struct radeon_device *rdev)
 	else
 		actual_temp = 0;
 
-	return actual_temp * 1000;
+	actual_temp = actual_temp * 1000;
+
+	return actual_temp;
 }
 
 /*

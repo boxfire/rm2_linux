@@ -712,6 +712,7 @@ static int vega10_sort_lookup_table(struct pp_hwmgr *hwmgr,
 		struct phm_ppt_v1_voltage_lookup_table *lookup_table)
 {
 	uint32_t table_size, i, j;
+	struct phm_ppt_v1_voltage_lookup_record tmp_voltage_lookup_record;
 
 	PP_ASSERT_WITH_CODE(lookup_table && lookup_table->count,
 		"Lookup table is empty", return -EINVAL);
@@ -723,8 +724,9 @@ static int vega10_sort_lookup_table(struct pp_hwmgr *hwmgr,
 		for (j = i + 1; j > 0; j--) {
 			if (lookup_table->entries[j].us_vdd <
 					lookup_table->entries[j - 1].us_vdd) {
-				swap(lookup_table->entries[j - 1],
-				     lookup_table->entries[j]);
+				tmp_voltage_lookup_record = lookup_table->entries[j - 1];
+				lookup_table->entries[j - 1] = lookup_table->entries[j];
+				lookup_table->entries[j] = tmp_voltage_lookup_record;
 			}
 		}
 	}
@@ -5096,7 +5098,9 @@ static void vega10_odn_update_soc_table(struct pp_hwmgr *hwmgr,
 
 	if (type == PP_OD_EDIT_SCLK_VDDC_TABLE) {
 		podn_vdd_dep = &data->odn_dpm_table.vdd_dep_on_sclk;
-		for (i = 0; i < podn_vdd_dep->count; i++)
+		for (i = 0; i < podn_vdd_dep->count - 1; i++)
+			od_vddc_lookup_table->entries[i].us_vdd = podn_vdd_dep->entries[i].vddc;
+		if (od_vddc_lookup_table->entries[i].us_vdd < podn_vdd_dep->entries[i].vddc)
 			od_vddc_lookup_table->entries[i].us_vdd = podn_vdd_dep->entries[i].vddc;
 	} else if (type == PP_OD_EDIT_MCLK_VDDC_TABLE) {
 		podn_vdd_dep = &data->odn_dpm_table.vdd_dep_on_mclk;

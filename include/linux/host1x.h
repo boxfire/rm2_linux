@@ -18,7 +18,6 @@ enum host1x_class {
 };
 
 struct host1x_client;
-struct iommu_group;
 
 /**
  * struct host1x_client_ops - host1x client operations
@@ -35,7 +34,6 @@ struct host1x_client_ops {
  * @list: list node for the host1x client
  * @parent: pointer to struct device representing the host1x controller
  * @dev: pointer to struct device backing this host1x client
- * @group: IOMMU group that this client is a member of
  * @ops: host1x client operations
  * @class: host1x class represented by this client
  * @channel: host1x channel associated with this client
@@ -46,7 +44,6 @@ struct host1x_client {
 	struct list_head list;
 	struct device *parent;
 	struct device *dev;
-	struct iommu_group *group;
 
 	const struct host1x_client_ops *ops;
 
@@ -67,9 +64,8 @@ struct sg_table;
 struct host1x_bo_ops {
 	struct host1x_bo *(*get)(struct host1x_bo *bo);
 	void (*put)(struct host1x_bo *bo);
-	struct sg_table *(*pin)(struct device *dev, struct host1x_bo *bo,
-				dma_addr_t *phys);
-	void (*unpin)(struct device *dev, struct sg_table *sgt);
+	dma_addr_t (*pin)(struct host1x_bo *bo, struct sg_table **sgt);
+	void (*unpin)(struct host1x_bo *bo, struct sg_table *sgt);
 	void *(*mmap)(struct host1x_bo *bo);
 	void (*munmap)(struct host1x_bo *bo, void *addr);
 	void *(*kmap)(struct host1x_bo *bo, unsigned int pagenum);
@@ -96,17 +92,15 @@ static inline void host1x_bo_put(struct host1x_bo *bo)
 	bo->ops->put(bo);
 }
 
-static inline struct sg_table *host1x_bo_pin(struct device *dev,
-					     struct host1x_bo *bo,
-					     dma_addr_t *phys)
+static inline dma_addr_t host1x_bo_pin(struct host1x_bo *bo,
+				       struct sg_table **sgt)
 {
-	return bo->ops->pin(dev, bo, phys);
+	return bo->ops->pin(bo, sgt);
 }
 
-static inline void host1x_bo_unpin(struct device *dev, struct host1x_bo *bo,
-				   struct sg_table *sgt)
+static inline void host1x_bo_unpin(struct host1x_bo *bo, struct sg_table *sgt)
 {
-	bo->ops->unpin(dev, sgt);
+	bo->ops->unpin(bo, sgt);
 }
 
 static inline void *host1x_bo_mmap(struct host1x_bo *bo)
@@ -164,7 +158,7 @@ u32 host1x_syncpt_base_id(struct host1x_syncpt_base *base);
 struct host1x_channel;
 struct host1x_job;
 
-struct host1x_channel *host1x_channel_request(struct host1x_client *client);
+struct host1x_channel *host1x_channel_request(struct device *dev);
 struct host1x_channel *host1x_channel_get(struct host1x_channel *channel);
 void host1x_channel_put(struct host1x_channel *channel);
 int host1x_job_submit(struct host1x_job *job);
@@ -172,9 +166,6 @@ int host1x_job_submit(struct host1x_job *job);
 /*
  * host1x job
  */
-
-#define HOST1X_RELOC_READ	(1 << 0)
-#define HOST1X_RELOC_WRITE	(1 << 1)
 
 struct host1x_reloc {
 	struct {
@@ -186,7 +177,6 @@ struct host1x_reloc {
 		unsigned long offset;
 	} target;
 	unsigned long shift;
-	unsigned long flags;
 };
 
 struct host1x_job {

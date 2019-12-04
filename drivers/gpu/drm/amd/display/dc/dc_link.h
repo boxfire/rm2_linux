@@ -126,8 +126,7 @@ struct dc_link {
 	unsigned short chip_caps;
 	unsigned int dpcd_sink_count;
 	enum edp_revision edp_revision;
-	bool psr_feature_enabled;
-	bool psr_allow_active;
+	bool psr_enabled;
 
 	/* MST record stream using this link */
 	struct link_flags {
@@ -159,18 +158,6 @@ static inline struct dc_link *dc_get_link_at_index(struct dc *dc, uint32_t link_
 	return dc->links[link_index];
 }
 
-static inline struct dc_link *get_edp_link(const struct dc *dc)
-{
-	int i;
-
-	// report any eDP links, even unconnected DDI's
-	for (i = 0; i < dc->link_count; i++) {
-		if (dc->links[i]->connector_signal == SIGNAL_TYPE_EDP)
-			return dc->links[i];
-	}
-	return NULL;
-}
-
 /* Set backlight level of an embedded panel (eDP, LVDS).
  * backlight_pwm_u16_16 is unsigned 32 bit with 16 bit integer
  * and 16 bit fractional, where 1.0 is max backlight value.
@@ -183,7 +170,7 @@ int dc_link_get_backlight_level(const struct dc_link *dc_link);
 
 bool dc_link_set_abm_disable(const struct dc_link *dc_link);
 
-bool dc_link_set_psr_allow_active(struct dc_link *dc_link, bool enable, bool wait);
+bool dc_link_set_psr_enable(const struct dc_link *dc_link, bool enable, bool wait);
 
 bool dc_link_get_psr_state(const struct dc_link *dc_link, uint32_t *psr_state);
 
@@ -205,7 +192,6 @@ enum dc_detect_reason {
 
 bool dc_link_detect(struct dc_link *dc_link, enum dc_detect_reason reason);
 bool dc_link_get_hpd_state(struct dc_link *dc_link);
-enum dc_status dc_link_allocate_mst_payload(struct pipe_ctx *pipe_ctx);
 
 /* Notify DC about DP RX Interrupt (aka Short Pulse Interrupt).
  * Return:

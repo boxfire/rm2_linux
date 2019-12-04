@@ -244,24 +244,33 @@ static int vcn_v2_0_hw_init(void *handle)
 	struct amdgpu_ring *ring = &adev->vcn.inst->ring_dec;
 	int i, r;
 
-	adev->nbio.funcs->vcn_doorbell_range(adev, ring->use_doorbell,
+	adev->nbio_funcs->vcn_doorbell_range(adev, ring->use_doorbell,
 					     ring->doorbell_index, 0);
 
-	r = amdgpu_ring_test_helper(ring);
-	if (r)
+	ring->sched.ready = true;
+	r = amdgpu_ring_test_ring(ring);
+	if (r) {
+		ring->sched.ready = false;
 		goto done;
+	}
 
 	for (i = 0; i < adev->vcn.num_enc_rings; ++i) {
 		ring = &adev->vcn.inst->ring_enc[i];
-		r = amdgpu_ring_test_helper(ring);
-		if (r)
+		ring->sched.ready = true;
+		r = amdgpu_ring_test_ring(ring);
+		if (r) {
+			ring->sched.ready = false;
 			goto done;
+		}
 	}
 
 	ring = &adev->vcn.inst->ring_jpeg;
-	r = amdgpu_ring_test_helper(ring);
-	if (r)
+	ring->sched.ready = true;
+	r = amdgpu_ring_test_ring(ring);
+	if (r) {
+		ring->sched.ready = false;
 		goto done;
+	}
 
 done:
 	if (!r)

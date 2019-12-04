@@ -43,8 +43,6 @@
 
 #include "amdgpu_amdkfd.h"
 
-#include "amdgpu_ras.h"
-
 /*
  * KMS wrapper.
  * - 3.0.0 - initial driver
@@ -84,11 +82,12 @@
  * - 3.33.0 - Fixes for GDS ENOMEM failures in AMDGPU_CS.
  * - 3.34.0 - Non-DC can flip correctly between buffers with different pitches
  * - 3.35.0 - Add drm_amdgpu_info_device::tcc_disabled_mask
- * - 3.36.0 - Allow reading more status registers on si/cik
  */
 #define KMS_DRIVER_MAJOR	3
-#define KMS_DRIVER_MINOR	36
+#define KMS_DRIVER_MINOR	35
 #define KMS_DRIVER_PATCHLEVEL	0
+
+#define AMDGPU_MAX_TIMEOUT_PARAM_LENTH	256
 
 int amdgpu_vram_limit = 0;
 int amdgpu_vis_vram_limit = 0;
@@ -102,7 +101,7 @@ int amdgpu_disp_priority = 0;
 int amdgpu_hw_i2c = 0;
 int amdgpu_pcie_gen2 = -1;
 int amdgpu_msi = -1;
-char amdgpu_lockup_timeout[AMDGPU_MAX_TIMEOUT_PARAM_LENGTH];
+char amdgpu_lockup_timeout[AMDGPU_MAX_TIMEOUT_PARAM_LENTH];
 int amdgpu_dpm = -1;
 int amdgpu_fw_load_type = -1;
 int amdgpu_aspm = -1;
@@ -129,7 +128,11 @@ char *amdgpu_disable_cu = NULL;
 char *amdgpu_virtual_display = NULL;
 /* OverDrive(bit 14) disabled by default*/
 uint amdgpu_pp_feature_mask = 0xffffbfff;
-uint amdgpu_force_long_training = 0;
+int amdgpu_ngg = 0;
+int amdgpu_prim_buf_per_se = 0;
+int amdgpu_pos_buf_per_se = 0;
+int amdgpu_cntl_sb_buf_per_se = 0;
+int amdgpu_param_buf_per_se = 0;
 int amdgpu_job_hang_limit = 0;
 int amdgpu_lbpw = -1;
 int amdgpu_compute_multipipe = -1;
@@ -143,13 +146,12 @@ int amdgpu_mcbp = 0;
 int amdgpu_discovery = -1;
 int amdgpu_mes = 0;
 int amdgpu_noretry = 1;
-int amdgpu_force_asic_type = -1;
 
 struct amdgpu_mgpu_info mgpu_info = {
 	.mutex = __MUTEX_INITIALIZER(mgpu_info.mutex),
 };
 int amdgpu_ras_enable = -1;
-uint amdgpu_ras_mask = 0xffffffff;
+uint amdgpu_ras_mask = 0xfffffffb;
 
 /**
  * DOC: vramlimit (int)
@@ -242,21 +244,16 @@ module_param_named(msi, amdgpu_msi, int, 0444);
  *
  * The format can be [Non-Compute] or [GFX,Compute,SDMA,Video]. That is there can be one or
  * multiple values specified. 0 and negative values are invalidated. They will be adjusted
- * to the default timeout.
- *
- * - With one value specified, the setting will apply to all non-compute jobs.
- * - With multiple values specified, the first one will be for GFX.
- *   The second one is for Compute. The third and fourth ones are
- *   for SDMA and Video.
- *
+ * to default timeout.
+ *  - With one value specified, the setting will apply to all non-compute jobs.
+ *  - With multiple values specified, the first one will be for GFX. The second one is for Compute.
+ *    And the third and fourth ones are for SDMA and Video.
  * By default(with no lockup_timeout settings), the timeout for all non-compute(GFX, SDMA and Video)
  * jobs is 10000. And there is no timeout enforced on compute jobs.
  */
-MODULE_PARM_DESC(lockup_timeout, "GPU lockup timeout in ms (default: for bare metal 10000 for non-compute jobs and infinity timeout for compute jobs; "
-		"for passthrough or sriov, 10000 for all jobs."
+MODULE_PARM_DESC(lockup_timeout, "GPU lockup timeout in ms (default: 10000 for non-compute jobs and infinity timeout for compute jobs."
 		" 0: keep default value. negative: infinity timeout), "
-		"format: for bare metal [Non-Compute] or [GFX,Compute,SDMA,Video]; "
-		"for passthrough or sriov [all jobs] or [GFX,Compute,SDMA,Video].");
+		"format is [Non-Compute] or [GFX,Compute,SDMA,Video]");
 module_param_string(lockup_timeout, amdgpu_lockup_timeout, sizeof(amdgpu_lockup_timeout), 0444);
 
 /**
@@ -395,14 +392,6 @@ MODULE_PARM_DESC(ppfeaturemask, "all power features enabled (default))");
 module_param_named(ppfeaturemask, amdgpu_pp_feature_mask, uint, 0444);
 
 /**
- * DOC: forcelongtraining (uint)
- * Force long memory training in resume.
- * The default is zero, indicates short training in resume.
- */
-MODULE_PARM_DESC(forcelongtraining, "force memory long training");
-module_param_named(forcelongtraining, amdgpu_force_long_training, uint, 0444);
-
-/**
  * DOC: pcie_gen_cap (uint)
  * Override PCIE gen speed capabilities. See the CAIL flags in drivers/gpu/drm/amd/include/amd_pcie.h.
  * The default is 0 (automatic for each asic).
@@ -458,6 +447,42 @@ module_param_named(disable_cu, amdgpu_disable_cu, charp, 0444);
 MODULE_PARM_DESC(virtual_display,
 		 "Enable virtual display feature (the virtual_display will be set like xxxx:xx:xx.x,x;xxxx:xx:xx.x,x)");
 module_param_named(virtual_display, amdgpu_virtual_display, charp, 0444);
+
+/**
+ * DOC: ngg (int)
+ * Set to enable Next Generation Graphics (1 = enable). The default is 0 (disabled).
+ */
+MODULE_PARM_DESC(ngg, "Next Generation Graphics (1 = enable, 0 = disable(default depending on gfx))");
+module_param_named(ngg, amdgpu_ngg, int, 0444);
+
+/**
+ * DOC: prim_buf_per_se (int)
+ * Override the size of Primitive Buffer per Shader Engine in Byte. The default is 0 (depending on gfx).
+ */
+MODULE_PARM_DESC(prim_buf_per_se, "the size of Primitive Buffer per Shader Engine (default depending on gfx)");
+module_param_named(prim_buf_per_se, amdgpu_prim_buf_per_se, int, 0444);
+
+/**
+ * DOC: pos_buf_per_se (int)
+ * Override the size of Position Buffer per Shader Engine in Byte. The default is 0 (depending on gfx).
+ */
+MODULE_PARM_DESC(pos_buf_per_se, "the size of Position Buffer per Shader Engine (default depending on gfx)");
+module_param_named(pos_buf_per_se, amdgpu_pos_buf_per_se, int, 0444);
+
+/**
+ * DOC: cntl_sb_buf_per_se (int)
+ * Override the size of Control Sideband per Shader Engine in Byte. The default is 0 (depending on gfx).
+ */
+MODULE_PARM_DESC(cntl_sb_buf_per_se, "the size of Control Sideband per Shader Engine (default depending on gfx)");
+module_param_named(cntl_sb_buf_per_se, amdgpu_cntl_sb_buf_per_se, int, 0444);
+
+/**
+ * DOC: param_buf_per_se (int)
+ * Override the size of Off-Chip Parameter Cache per Shader Engine in Byte.
+ * The default is 0 (depending on gfx).
+ */
+MODULE_PARM_DESC(param_buf_per_se, "the size of Off-Chip Parameter Cache per Shader Engine (default depending on gfx)");
+module_param_named(param_buf_per_se, amdgpu_param_buf_per_se, int, 0444);
 
 /**
  * DOC: job_hang_limit (int)
@@ -590,16 +615,6 @@ module_param_named(mes, amdgpu_mes, int, 0444);
 MODULE_PARM_DESC(noretry,
 	"Disable retry faults (0 = retry enabled, 1 = retry disabled (default))");
 module_param_named(noretry, amdgpu_noretry, int, 0644);
-
-/**
- * DOC: force_asic_type (int)
- * A non negative value used to specify the asic type for all supported GPUs.
- */
-MODULE_PARM_DESC(force_asic_type,
-	"A non negative value used to specify the asic type for all supported GPUs");
-module_param_named(force_asic_type, amdgpu_force_asic_type, int, 0444);
-
-
 
 #ifdef CONFIG_HSA_AMD
 /**
@@ -1007,7 +1022,6 @@ static const struct pci_device_id pciidlist[] = {
 
 	/* Navi12 */
 	{0x1002, 0x7360, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI12|AMD_EXP_HW_SUPPORT},
-	{0x1002, 0x7362, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI12|AMD_EXP_HW_SUPPORT},
 
 	{0, 0, 0}
 };
@@ -1113,10 +1127,7 @@ amdgpu_pci_remove(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
 
-#ifdef MODULE
-	if (THIS_MODULE->state != MODULE_STATE_GOING)
-#endif
-		DRM_ERROR("Hotplug removal is not supported\n");
+	DRM_ERROR("Device removal is currently not supported outside of fbcon\n");
 	drm_dev_unplug(dev);
 	drm_dev_put(dev);
 	pci_disable_device(pdev);
@@ -1128,9 +1139,6 @@ amdgpu_pci_shutdown(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
 	struct amdgpu_device *adev = dev->dev_private;
-
-	if (amdgpu_ras_intr_triggered())
-		return;
 
 	/* if we are running in a VM, make sure the device
 	 * torn down properly on reboot/shutdown.
@@ -1166,13 +1174,8 @@ static int amdgpu_pmops_resume(struct device *dev)
 static int amdgpu_pmops_freeze(struct device *dev)
 {
 	struct drm_device *drm_dev = dev_get_drvdata(dev);
-	struct amdgpu_device *adev = drm_dev->dev_private;
-	int r;
 
-	r = amdgpu_device_suspend(drm_dev, false, true);
-	if (r)
-		return r;
-	return amdgpu_asic_reset(adev);
+	return amdgpu_device_suspend(drm_dev, false, true);
 }
 
 static int amdgpu_pmops_thaw(struct device *dev)
@@ -1342,6 +1345,66 @@ int amdgpu_file_to_fpriv(struct file *filp, struct amdgpu_fpriv **fpriv)
 	file = filp->private_data;
 	*fpriv = file->driver_priv;
 	return 0;
+}
+
+int amdgpu_device_get_job_timeout_settings(struct amdgpu_device *adev)
+{
+	char *input = amdgpu_lockup_timeout;
+	char *timeout_setting = NULL;
+	int index = 0;
+	long timeout;
+	int ret = 0;
+
+	/*
+	 * By default timeout for non compute jobs is 10000.
+	 * And there is no timeout enforced on compute jobs.
+	 */
+	adev->gfx_timeout = msecs_to_jiffies(10000);
+	adev->sdma_timeout = adev->video_timeout = adev->gfx_timeout;
+	adev->compute_timeout = MAX_SCHEDULE_TIMEOUT;
+
+	if (strnlen(input, AMDGPU_MAX_TIMEOUT_PARAM_LENTH)) {
+		while ((timeout_setting = strsep(&input, ",")) &&
+				strnlen(timeout_setting, AMDGPU_MAX_TIMEOUT_PARAM_LENTH)) {
+			ret = kstrtol(timeout_setting, 0, &timeout);
+			if (ret)
+				return ret;
+
+			if (timeout == 0) {
+				index++;
+				continue;
+			} else if (timeout < 0) {
+				timeout = MAX_SCHEDULE_TIMEOUT;
+			} else {
+				timeout = msecs_to_jiffies(timeout);
+			}
+
+			switch (index++) {
+			case 0:
+				adev->gfx_timeout = timeout;
+				break;
+			case 1:
+				adev->compute_timeout = timeout;
+				break;
+			case 2:
+				adev->sdma_timeout = timeout;
+				break;
+			case 3:
+				adev->video_timeout = timeout;
+				break;
+			default:
+				break;
+			}
+		}
+		/*
+		 * There is only one value specified and
+		 * it should apply to all non-compute jobs.
+		 */
+		if (index == 1)
+			adev->sdma_timeout = adev->video_timeout = adev->gfx_timeout;
+	}
+
+	return ret;
 }
 
 static bool

@@ -464,7 +464,6 @@ static int mock_breadcrumbs_smoketest(void *arg)
 		get_task_struct(threads[n]);
 	}
 
-	yield(); /* start all threads before we begin */
 	msleep(jiffies_to_msecs(i915_selftest.timeout_jiffies));
 
 	for (n = 0; n < ncpus; n++) {
@@ -1159,8 +1158,6 @@ static int live_parallel_engines(void *arg)
 			get_task_struct(tsk[idx++]);
 		}
 
-		yield(); /* start all threads before we kthread_stop() */
-
 		idx = 0;
 		for_each_uabi_engine(engine, i915) {
 			int status;
@@ -1317,7 +1314,6 @@ static int live_breadcrumbs_smoketest(void *arg)
 		idx++;
 	}
 
-	yield(); /* start all threads before we begin */
 	msleep(jiffies_to_msecs(i915_selftest.timeout_jiffies));
 
 out_flush:

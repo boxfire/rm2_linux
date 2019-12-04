@@ -513,9 +513,6 @@ static int check_dirty_whitelist(struct i915_gem_context *ctx,
 
 		ro_reg = ro_register(reg);
 
-		/* Clear non priv flags */
-		reg &= RING_FORCE_TO_NONPRIV_ADDRESS_MASK;
-
 		srm = MI_STORE_REGISTER_MEM;
 		lrm = MI_LOAD_REGISTER_MEM;
 		if (INTEL_GEN(ctx->i915) >= 8)
@@ -813,8 +810,8 @@ static int read_whitelisted_registers(struct i915_gem_context *ctx,
 		u64 offset = results->node.start + sizeof(u32) * i;
 		u32 reg = i915_mmio_reg_offset(engine->whitelist.list[i].reg);
 
-		/* Clear non priv flags */
-		reg &= RING_FORCE_TO_NONPRIV_ADDRESS_MASK;
+		/* Clear access permission field */
+		reg &= ~RING_FORCE_TO_NONPRIV_ACCESS_MASK;
 
 		*cs++ = srm;
 		*cs++ = reg;
@@ -851,9 +848,6 @@ static int scrub_whitelisted_registers(struct i915_gem_context *ctx,
 
 		if (ro_register(reg))
 			continue;
-
-		/* Clear non priv flags */
-		reg &= RING_FORCE_TO_NONPRIV_ADDRESS_MASK;
 
 		*cs++ = reg;
 		*cs++ = 0xffffffff;

@@ -16,7 +16,6 @@ int igt_live_test_begin(struct igt_live_test *t,
 			const char *func,
 			const char *name)
 {
-	struct intel_gt *gt = &i915->gt;
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 	int err;
@@ -25,7 +24,7 @@ int igt_live_test_begin(struct igt_live_test *t,
 	t->func = func;
 	t->name = name;
 
-	err = intel_gt_wait_for_idle(gt, MAX_SCHEDULE_TIMEOUT);
+	err = intel_gt_wait_for_idle(&i915->gt, MAX_SCHEDULE_TIMEOUT);
 	if (err) {
 		pr_err("%s(%s): failed to idle before, with err=%d!",
 		       func, name, err);
@@ -34,7 +33,7 @@ int igt_live_test_begin(struct igt_live_test *t,
 
 	t->reset_global = i915_reset_count(&i915->gpu_error);
 
-	for_each_engine(engine, gt, id)
+	for_each_engine(engine, i915, id)
 		t->reset_engine[id] =
 			i915_reset_engine_count(&i915->gpu_error, engine);
 
@@ -57,7 +56,7 @@ int igt_live_test_end(struct igt_live_test *t)
 		return -EIO;
 	}
 
-	for_each_engine(engine, &i915->gt, id) {
+	for_each_engine(engine, i915, id) {
 		if (t->reset_engine[id] ==
 		    i915_reset_engine_count(&i915->gpu_error, engine))
 			continue;

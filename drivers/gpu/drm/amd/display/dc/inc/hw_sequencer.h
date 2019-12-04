@@ -114,9 +114,6 @@ struct hw_sequencer_funcs {
 			int opp_id);
 
 #if defined(CONFIG_DRM_AMD_DC_DCN2_0)
-	void (*program_front_end_for_ctx)(
-			struct dc *dc,
-			struct dc_state *context);
 	void (*program_triplebuffer)(
 		const struct dc *dc,
 		struct pipe_ctx *pipe_ctx,
@@ -232,13 +229,6 @@ struct hw_sequencer_funcs {
 			struct dc *dc,
 			struct dc_state *context);
 
-	void (*exit_optimized_pwr_state)(
-			const struct dc *dc,
-			struct dc_state *context);
-	void (*optimize_pwr_state)(
-			const struct dc *dc,
-			struct dc_state *context);
-
 #if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 	bool (*update_bandwidth)(
 			struct dc *dc,
@@ -331,12 +321,10 @@ struct hw_sequencer_funcs {
 			struct dc_state *context);
 	void (*update_writeback)(struct dc *dc,
 			const struct dc_stream_status *stream_status,
-			struct dc_writeback_info *wb_info,
-			struct dc_state *context);
+			struct dc_writeback_info *wb_info);
 	void (*enable_writeback)(struct dc *dc,
 			const struct dc_stream_status *stream_status,
-			struct dc_writeback_info *wb_info,
-			struct dc_state *context);
+			struct dc_writeback_info *wb_info);
 	void (*disable_writeback)(struct dc *dc,
 			unsigned int dwb_pipe_inst);
 #endif
@@ -349,9 +337,6 @@ struct hw_sequencer_funcs {
 			enum dc_clock_type clock_type,
 			struct dc_clock_config *clock_cfg);
 
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
-	bool (*s0i3_golden_init_wa)(struct dc *dc);
-#endif
 };
 
 void color_space_to_black_color(

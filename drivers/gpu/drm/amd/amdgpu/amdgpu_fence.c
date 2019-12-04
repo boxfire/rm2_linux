@@ -462,7 +462,18 @@ int amdgpu_fence_driver_init_ring(struct amdgpu_ring *ring,
 			timeout = adev->gfx_timeout;
 			break;
 		case AMDGPU_RING_TYPE_COMPUTE:
-			timeout = adev->compute_timeout;
+			/*
+			 * For non-sriov case, no timeout enforce
+			 * on compute ring by default. Unless user
+			 * specifies a timeout for compute ring.
+			 *
+			 * For sriov case, always use the timeout
+			 * as gfx ring
+			 */
+			if (!amdgpu_sriov_vf(ring->adev))
+				timeout = adev->compute_timeout;
+			else
+				timeout = adev->gfx_timeout;
 			break;
 		case AMDGPU_RING_TYPE_SDMA:
 			timeout = adev->sdma_timeout;

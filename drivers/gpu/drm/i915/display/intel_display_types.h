@@ -128,8 +128,7 @@ struct intel_encoder {
 
 	enum intel_output_type type;
 	enum port port;
-	u16 cloneable;
-	u8 pipe_mask;
+	unsigned int cloneable;
 	enum intel_hotplug_state (*hotplug)(struct intel_encoder *encoder,
 					    struct intel_connector *connector,
 					    bool irq_received);
@@ -188,6 +187,7 @@ struct intel_encoder {
 	 * device interrupts are disabled.
 	 */
 	void (*suspend)(struct intel_encoder *);
+	int crtc_mask;
 	enum hpd_pin hpd_pin;
 	enum intel_display_power_domain power_domain;
 	/* for communication with audio component; protected by av_mutex */
@@ -505,14 +505,6 @@ struct intel_atomic_state {
 	bool skip_intermediate_wm;
 
 	bool rps_interactive;
-
-	/*
-	 * active_pipes
-	 * min_cdclk[]
-	 * min_voltage_level[]
-	 * cdclk.*
-	 */
-	bool global_state_changed;
 
 	/* Gen9+ only */
 	struct skl_ddb_values wm_results;
@@ -940,8 +932,6 @@ struct intel_crtc_state {
 
 	struct intel_crtc_wm_state wm;
 
-	int min_cdclk[I915_MAX_PLANES];
-
 	u32 data_rate[I915_MAX_PLANES];
 
 	/* Gamma mode programmed on the pipe */
@@ -996,8 +986,8 @@ struct intel_crtc_state {
 		bool dsc_split;
 		u16 compressed_bpp;
 		u8 slice_count;
-		struct drm_dsc_config config;
-	} dsc;
+	} dsc_params;
+	struct drm_dsc_config dp_dsc_cfg;
 
 	/* Forward Error correction State */
 	bool fec_enable;
@@ -1087,8 +1077,6 @@ struct intel_plane {
 	bool (*get_hw_state)(struct intel_plane *plane, enum pipe *pipe);
 	int (*check_plane)(struct intel_crtc_state *crtc_state,
 			   struct intel_plane_state *plane_state);
-	int (*min_cdclk)(const struct intel_crtc_state *crtc_state,
-			 const struct intel_plane_state *plane_state);
 };
 
 struct intel_watermark_params {

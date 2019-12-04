@@ -1105,33 +1105,21 @@ int drm_gem_mmap_obj(struct drm_gem_object *obj, unsigned long obj_size,
 	if (obj_size < vma->vm_end - vma->vm_start)
 		return -EINVAL;
 
-	/* Take a ref for this mapping of the object, so that the fault
-	 * handler can dereference the mmap offset's pointer to the object.
-	 * This reference is cleaned up by the corresponding vm_close
-	 * (which should happen whether the vma was created by this call, or
-	 * by a vm_open due to mremap or partial unmap or whatever).
-	 */
-	drm_gem_object_get(obj);
-
 	if (obj->funcs && obj->funcs->mmap) {
 		/* Remove the fake offset */
 		vma->vm_pgoff -= drm_vma_node_start(&obj->vma_node);
 
 		ret = obj->funcs->mmap(obj, vma);
-		if (ret) {
-			drm_gem_object_put_unlocked(obj);
+		if (ret)
 			return ret;
-		}
 		WARN_ON(!(vma->vm_flags & VM_DONTEXPAND));
 	} else {
 		if (obj->funcs && obj->funcs->vm_ops)
 			vma->vm_ops = obj->funcs->vm_ops;
 		else if (dev->driver->gem_vm_ops)
 			vma->vm_ops = dev->driver->gem_vm_ops;
-		else {
-			drm_gem_object_put_unlocked(obj);
+		else
 			return -EINVAL;
-		}
 
 		vma->vm_flags |= VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP;
 		vma->vm_page_prot = pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
@@ -1139,6 +1127,14 @@ int drm_gem_mmap_obj(struct drm_gem_object *obj, unsigned long obj_size,
 	}
 
 	vma->vm_private_data = obj;
+
+	/* Take a ref for this mapping of the object, so that the fault
+	 * handler can dereference the mmap offset's pointer to the object.
+	 * This reference is cleaned up by the corresponding vm_close
+	 * (which should happen whether the vma was created by this call, or
+	 * by a vm_open due to mremap or partial unmap or whatever).
+	 */
+	drm_gem_object_get(obj);
 
 	return 0;
 }

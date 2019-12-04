@@ -97,10 +97,11 @@ enum dc_edid_status dm_helpers_parse_edid_caps(
 			(struct edid *) edid->raw_edid);
 
 	sad_count = drm_edid_to_sad((struct edid *) edid->raw_edid, &sads);
-	if (sad_count < 0)
-		DRM_ERROR("Couldn't read SADs: %d\n", sad_count);
-	if (sad_count <= 0)
+	if (sad_count <= 0) {
+		DRM_INFO("SADs count is: %d, don't need to read it\n",
+				sad_count);
 		return result;
+	}
 
 	edid_caps->audio_mode_count = sad_count < DC_MAX_AUDIO_DESC_COUNT ? sad_count : DC_MAX_AUDIO_DESC_COUNT;
 	for (i = 0; i < edid_caps->audio_mode_count; ++i) {
@@ -281,7 +282,7 @@ void dm_helpers_dp_mst_clear_payload_allocation_table(
  * Polls for ACT (allocation change trigger) handled and sends
  * ALLOCATE_PAYLOAD message.
  */
-enum act_return_status dm_helpers_dp_mst_poll_for_allocation_change_trigger(
+bool dm_helpers_dp_mst_poll_for_allocation_change_trigger(
 		struct dc_context *ctx,
 		const struct dc_stream_state *stream)
 {
@@ -292,19 +293,19 @@ enum act_return_status dm_helpers_dp_mst_poll_for_allocation_change_trigger(
 	aconnector = (struct amdgpu_dm_connector *)stream->dm_stream_context;
 
 	if (!aconnector || !aconnector->mst_port)
-		return ACT_FAILED;
+		return false;
 
 	mst_mgr = &aconnector->mst_port->mst_mgr;
 
 	if (!mst_mgr->mst_state)
-		return ACT_FAILED;
+		return false;
 
 	ret = drm_dp_check_act_status(mst_mgr);
 
 	if (ret)
-		return ACT_FAILED;
+		return false;
 
-	return ACT_SUCCESS;
+	return true;
 }
 
 bool dm_helpers_dp_mst_send_payload_allocation(

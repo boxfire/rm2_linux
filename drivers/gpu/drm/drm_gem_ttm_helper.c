@@ -64,19 +64,8 @@ int drm_gem_ttm_mmap(struct drm_gem_object *gem,
 		     struct vm_area_struct *vma)
 {
 	struct ttm_buffer_object *bo = drm_gem_ttm_of_gem(gem);
-	int ret;
 
-	ret = ttm_bo_mmap_obj(vma, bo);
-	if (ret < 0)
-		return ret;
-
-	/*
-	 * ttm has its own object refcounting, so drop gem reference
-	 * to avoid double accounting counting.
-	 */
-	drm_gem_object_put_unlocked(gem);
-
-	return 0;
+	return ttm_bo_mmap_obj(vma, bo);
 }
 EXPORT_SYMBOL(drm_gem_ttm_mmap);
 

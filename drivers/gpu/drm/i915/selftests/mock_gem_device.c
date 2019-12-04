@@ -28,7 +28,6 @@
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_requests.h"
 #include "gt/mock_engine.h"
-#include "intel_memory_region.h"
 
 #include "mock_request.h"
 #include "mock_gem_device.h"
@@ -41,14 +40,14 @@
 
 void mock_device_flush(struct drm_i915_private *i915)
 {
-	struct intel_gt *gt = &i915->gt;
 	struct intel_engine_cs *engine;
 	enum intel_engine_id id;
 
 	do {
-		for_each_engine(engine, gt, id)
+		for_each_engine(engine, i915, id)
 			mock_engine_flush(engine);
-	} while (intel_gt_retire_requests_timeout(gt, MAX_SCHEDULE_TIMEOUT));
+	} while (intel_gt_retire_requests_timeout(&i915->gt,
+						  MAX_SCHEDULE_TIMEOUT));
 }
 
 static void mock_device_release(struct drm_device *dev)
@@ -61,7 +60,7 @@ static void mock_device_release(struct drm_device *dev)
 
 	i915_gem_drain_workqueue(i915);
 
-	for_each_engine(engine, &i915->gt, id)
+	for_each_engine(engine, i915, id)
 		mock_engine_free(engine);
 	i915_gem_driver_release__contexts(i915);
 
@@ -73,7 +72,7 @@ static void mock_device_release(struct drm_device *dev)
 	mock_fini_ggtt(&i915->ggtt);
 	destroy_workqueue(i915->wq);
 
-	intel_memory_regions_driver_release(i915);
+	i915_gem_cleanup_memory_regions(i915);
 
 	drm_mode_config_cleanup(&i915->drm);
 
@@ -165,7 +164,6 @@ struct drm_i915_private *mock_gem_device(void)
 		I915_GTT_PAGE_SIZE_2M;
 
 	mkwrite_device_info(i915)->memory_regions = REGION_SMEM;
-	intel_memory_regions_hw_probe(i915);
 
 	mock_uncore_init(&i915->uncore, i915);
 
@@ -199,6 +197,10 @@ struct drm_i915_private *mock_gem_device(void)
 
 	intel_engines_driver_register(i915);
 
+	err = i915_gem_init_memory_regions(i915);
+	if (err)
+		goto err_context;
+
 	return i915;
 
 err_context:
@@ -209,7 +211,6 @@ err_unlock:
 	intel_timelines_fini(i915);
 	destroy_workqueue(i915->wq);
 err_drv:
-	intel_memory_regions_driver_release(i915);
 	drm_mode_config_cleanup(&i915->drm);
 	drm_dev_fini(&i915->drm);
 put_device:

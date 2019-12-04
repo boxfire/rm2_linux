@@ -47,10 +47,9 @@ void i915_gem_object_free(struct drm_i915_gem_object *obj)
 }
 
 void i915_gem_object_init(struct drm_i915_gem_object *obj,
-			  const struct drm_i915_gem_object_ops *ops,
-			  struct lock_class_key *key)
+			  const struct drm_i915_gem_object_ops *ops)
 {
-	__mutex_init(&obj->mm.lock, "obj->mm.lock", key);
+	mutex_init(&obj->mm.lock);
 
 	spin_lock_init(&obj->vma.lock);
 	INIT_LIST_HEAD(&obj->vma.list);

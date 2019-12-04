@@ -102,7 +102,6 @@ struct kfd_mem_properties {
 	uint32_t		flags;
 	uint32_t		width;
 	uint32_t		mem_clk_max;
-	struct kfd_dev		*gpu;
 	struct kobject		*kobj;
 	struct attribute	attr;
 };
@@ -124,7 +123,6 @@ struct kfd_cache_properties {
 	uint32_t		cache_latency;
 	uint32_t		cache_type;
 	uint8_t			sibling_map[CRAT_SIBLINGMAP_SIZE];
-	struct kfd_dev		*gpu;
 	struct kobject		*kobj;
 	struct attribute	attr;
 };
@@ -143,7 +141,6 @@ struct kfd_iolink_properties {
 	uint32_t		max_bandwidth;
 	uint32_t		rec_transfer_size;
 	uint32_t		flags;
-	struct kfd_dev		*gpu;
 	struct kobject		*kobj;
 	struct attribute	attr;
 };

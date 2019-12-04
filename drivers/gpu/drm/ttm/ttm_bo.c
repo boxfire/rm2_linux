@@ -900,8 +900,7 @@ EXPORT_SYMBOL(ttm_bo_mem_put);
  */
 static int ttm_bo_add_move_fence(struct ttm_buffer_object *bo,
 				 struct ttm_mem_type_manager *man,
-				 struct ttm_mem_reg *mem,
-				 bool no_wait_gpu)
+				 struct ttm_mem_reg *mem)
 {
 	struct dma_fence *fence;
 	int ret;
@@ -910,22 +909,19 @@ static int ttm_bo_add_move_fence(struct ttm_buffer_object *bo,
 	fence = dma_fence_get(man->move);
 	spin_unlock(&man->move_lock);
 
-	if (!fence)
-		return 0;
+	if (fence) {
+		dma_resv_add_shared_fence(bo->base.resv, fence);
 
-	if (no_wait_gpu)
-		return -EBUSY;
+		ret = dma_resv_reserve_shared(bo->base.resv, 1);
+		if (unlikely(ret)) {
+			dma_fence_put(fence);
+			return ret;
+		}
 
-	dma_resv_add_shared_fence(bo->base.resv, fence);
-
-	ret = dma_resv_reserve_shared(bo->base.resv, 1);
-	if (unlikely(ret)) {
-		dma_fence_put(fence);
-		return ret;
+		dma_fence_put(bo->moving);
+		bo->moving = fence;
 	}
 
-	dma_fence_put(bo->moving);
-	bo->moving = fence;
 	return 0;
 }
 
@@ -956,7 +952,7 @@ static int ttm_bo_mem_force_space(struct ttm_buffer_object *bo,
 			return ret;
 	} while (1);
 
-	return ttm_bo_add_move_fence(bo, man, mem, ctx->no_wait_gpu);
+	return ttm_bo_add_move_fence(bo, man, mem);
 }
 
 static uint32_t ttm_bo_select_caching(struct ttm_mem_type_manager *man,
@@ -1096,18 +1092,14 @@ int ttm_bo_mem_space(struct ttm_buffer_object *bo,
 		if (unlikely(ret))
 			goto error;
 
-		if (!mem->mm_node)
-			continue;
-
-		ret = ttm_bo_add_move_fence(bo, man, mem, ctx->no_wait_gpu);
-		if (unlikely(ret)) {
-			(*man->func->put_node)(man, mem);
-			if (ret == -EBUSY)
-				continue;
-
-			goto error;
+		if (mem->mm_node) {
+			ret = ttm_bo_add_move_fence(bo, man, mem);
+			if (unlikely(ret)) {
+				(*man->func->put_node)(man, mem);
+				goto error;
+			}
+			return 0;
 		}
-		return 0;
 	}
 
 	for (i = 0; i < placement->num_busy_placement; ++i) {

@@ -13,7 +13,6 @@
 #include "intel_context.h"
 #include "intel_engine.h"
 #include "intel_engine_pm.h"
-#include "intel_ring.h"
 
 static struct i915_global_context {
 	struct i915_global base;
