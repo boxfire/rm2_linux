@@ -164,6 +164,28 @@
 	};
 };
 
+&i2c1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c1_pins>;
+	status = "okay";
+
+	lsm9ds1-imu@6b {
+		compatible = "st,lsm9ds1-imu";
+		reg = <0x6b>;
+
+		interrupt-parent = <&pio>;
+		interrupts = <7 9 IRQ_TYPE_EDGE_RISING>; /* PH9 */
+	};
+
+	lsm9ds1-magn@1e {
+		compatible = "st,lsm9ds1-magn";
+		reg = <0x1e>;
+
+		interrupt-parent = <&pio>;
+		interrupts = <2 7 IRQ_TYPE_EDGE_RISING>; /* PC7 */
+        };
+};
+
 &reg_ldo_io0 {
 	regulator-min-microvolt = <3300000>;
 	regulator-max-microvolt = <3300000>;
