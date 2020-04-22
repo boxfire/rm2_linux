@@ -212,6 +212,12 @@
 		interrupt-parent = <&pio>;
 		interrupts = <2 7 IRQ_TYPE_EDGE_RISING>; /* PC7 */
         };
+
+	mlx90614@5a {
+		compatible = "melexis,mlx90614";
+		reg = <0x5a>;
+		wakeup-gpios = <&pio 7 3 GPIO_ACTIVE_HIGH>; /* PH3 */
+	};
 };
 
 &reg_ldo_io0 {
