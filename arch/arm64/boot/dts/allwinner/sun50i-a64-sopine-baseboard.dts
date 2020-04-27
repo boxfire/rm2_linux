@@ -56,6 +56,11 @@
 		default-brightness-level = <8>;
 		enable-gpios = <&pio 7 10 GPIO_ACTIVE_HIGH>; /* LCD-BL-EN: PH10 */
 	};
+
+	pps {
+		compatible = "pps-gpio";
+		gpios = <&pio 2 8 IRQ_TYPE_EDGE_RISING>; /* PC8 */
+	};
 };
 
 &ac_power_supply {
