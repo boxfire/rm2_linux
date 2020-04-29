@@ -148,6 +148,34 @@
 	};
 };
 
+&spi0 {
+	status = "okay";
+	cs-gpios = <0>, <&pio 2 4 0>, <&pio 7 7 0>; /* PC4 and PH7 */
+	num-cs = <3>;
+
+	lsm9ds1-imu {
+		compatible = "st,lsm9ds1-imu";
+		reg = <1>;
+		spi-max-frequency = <10000000>;
+		spi-cpol;
+		spi-cpha;
+
+		interrupt-parent = <&pio>;
+		interrupts = <7 9 IRQ_TYPE_EDGE_RISING>; /* PH9 */
+	};
+
+	lsm9ds1-magn {
+		compatible = "st,lsm9ds1-magn";
+		reg = <2>;
+		spi-max-frequency = <10000000>;
+		spi-cpol;
+		spi-cpha;
+
+		interrupt-parent = <&pio>;
+		interrupts = <2 7 IRQ_TYPE_EDGE_RISING>; /* PC7 */
+	};
+};
+
 &i2c0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&i2c0_pins>;
