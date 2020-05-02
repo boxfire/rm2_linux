@@ -10,6 +10,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/gpio.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -169,6 +170,31 @@ static inline void sun6i_spi_fill_fifo(struct sun6i_spi *sspi, int len)
 		writeb(byte, sspi->base_addr + SUN6I_TXDATA_REG);
 		sspi->len--;
 	}
+}
+
+static int sun6i_spi_setup(struct spi_device *spi)
+{
+	int ret;
+
+	/* sanity check for native cs */
+	if (spi->mode & SPI_NO_CS)
+		return 0;
+	if (gpio_is_valid(spi->cs_gpio)) {
+		/* with gpio-cs set the GPIO to the correct level
+		 * and as output (in case the dt has the gpio not configured
+		 * as output but native cs)
+		 */
+		ret = gpio_direction_output(spi->cs_gpio,
+					    (spi->mode & SPI_CS_HIGH) ? 0 : 1);
+		if (ret)
+			dev_err(&spi->dev,
+				"could not set gpio %i as output: %i\n",
+				spi->cs_gpio, ret);
+
+		return ret;
+	}
+
+	return 0;
 }
 
 static void sun6i_spi_set_cs(struct spi_device *spi, bool enable)
@@ -470,6 +496,7 @@ static int sun6i_spi_probe(struct platform_device *pdev)
 
 	master->max_speed_hz = 100 * 1000 * 1000;
 	master->min_speed_hz = 3 * 1000;
+	master->setup = sun6i_spi_setup;
 	master->set_cs = sun6i_spi_set_cs;
 	master->transfer_one = sun6i_spi_transfer_one;
 	master->num_chipselect = 4;
