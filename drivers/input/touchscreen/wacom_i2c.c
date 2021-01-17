@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
+#include <linux/of.h>
 #include <asm/unaligned.h>
 
 #define WACOM_CMD_QUERY0	0x04
@@ -35,6 +36,13 @@ struct wacom_i2c {
 	u8 data[WACOM_QUERY_SIZE];
 	bool prox;
 	int tool;
+
+	bool flip_tilt_x;
+	bool flip_tilt_y;
+	bool flip_pos_x;
+	bool flip_pos_y;
+	bool flip_distance;
+	bool flip_pressure;
 };
 
 static int wacom_query_device(struct i2c_client *client,
@@ -144,6 +152,20 @@ static void wacom_i2c_close(struct input_dev *dev)
 	disable_irq(client->irq);
 }
 
+#ifdef CONFIG_OF
+static void wacom_of_read(struct wacom_i2c *wac_i2c)
+{
+	struct i2c_client *client = wac_i2c->client;
+
+	wac_i2c->flip_tilt_x = of_property_read_bool(client->dev.of_node, "flip-tilt-x");
+	wac_i2c->flip_tilt_y = of_property_read_bool(client->dev.of_node, "flip-tilt-y");
+	wac_i2c->flip_pos_x = of_property_read_bool(client->dev.of_node, "flip-pos-x");
+	wac_i2c->flip_pos_y = of_property_read_bool(client->dev.of_node, "flip-pos-y");
+	wac_i2c->flip_distance = of_property_read_bool(client->dev.of_node, "flip-distance");
+	wac_i2c->flip_pressure = of_property_read_bool(client->dev.of_node, "flip-pressure");
+}
+#endif
+
 static int wacom_i2c_probe(struct i2c_client *client,
 				     const struct i2c_device_id *id)
 {
@@ -214,6 +236,11 @@ static int wacom_i2c_probe(struct i2c_client *client,
 	}
 
 	i2c_set_clientdata(client, wac_i2c);
+
+#ifdef CONFIG_OF
+	wacom_of_read(wac_i2c);
+#endif
+
 	return 0;
 
 err_free_irq:
@@ -262,10 +289,21 @@ static const struct i2c_device_id wacom_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, wacom_i2c_id);
 
+#ifdef CONFIG_OF
+static const struct of_device_id wacom_i2c_of_match_table[] = {
+	{ .compatible = "wacom,wacom-i2c" },
+	{}
+};
+MODULE_DEVICE_TABLE(of, wacom_i2c_of_match_table);
+#endif
+
 static struct i2c_driver wacom_i2c_driver = {
 	.driver	= {
 		.name	= "wacom_i2c",
 		.pm	= &wacom_i2c_pm,
+#ifdef CONFIG_OF
+		.of_match_table = of_match_ptr(wacom_i2c_of_match_table),
+#endif
 	},
 
 	.probe		= wacom_i2c_probe,
