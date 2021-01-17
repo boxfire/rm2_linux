@@ -1360,6 +1360,16 @@ config MFD_SYSCON
 	  Select this option to enable accessing system control registers
 	  via regmap.
 
+config MFD_SY7636A
+	tristate "Silergy SY7636A Power Management chip driver"
+	select MFD_CORE
+	select REGMAP_I2C
+	select REGMAP_IRQ
+	depends on I2C=y
+	help
+	  Select this option to enable support for the Silergy SY7636A
+	  Power Management chip driver.
+
 config MFD_DAVINCI_VOICECODEC
 	tristate
 	select MFD_CORE
