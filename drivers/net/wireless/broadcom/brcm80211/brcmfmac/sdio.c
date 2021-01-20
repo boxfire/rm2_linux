@@ -4127,12 +4127,18 @@ int brcmf_sdio_get_fwname(struct device *dev, const char *ext, u8 *fw_name)
 		{ ext, fw_name },
 	};
 
+	printk("%s:%d\n", __func__, __LINE__);
+
 	fwreq = brcmf_fw_alloc_request(bus_if->chip, bus_if->chiprev,
 				       brcmf_sdio_fwnames,
 				       ARRAY_SIZE(brcmf_sdio_fwnames),
 				       fwnames, ARRAY_SIZE(fwnames));
-	if (!fwreq)
+
+	printk("%s:%d\n", __func__, __LINE__);
+	if (!fwreq) {
+		printk("%s:%d\n", __func__, __LINE__);
 		return -ENOMEM;
+	}
 
 	kfree(fwreq);
 	return 0;
@@ -4406,12 +4412,18 @@ brcmf_sdio_prepare_fw_request(struct brcmf_sdio *bus)
 		{ ".txt", bus->sdiodev->nvram_name },
 	};
 
+	printk("%s:%d\n", __func__, __LINE__);
+
 	fwreq = brcmf_fw_alloc_request(bus->ci->chip, bus->ci->chiprev,
 				       brcmf_sdio_fwnames,
 				       ARRAY_SIZE(brcmf_sdio_fwnames),
 				       fwnames, ARRAY_SIZE(fwnames));
-	if (!fwreq)
+
+	printk("%s:%d\n", __func__, __LINE__);
+	if (!fwreq) {
+		printk("%s:%d\n", __func__, __LINE__);
 		return NULL;
+	}
 
 	fwreq->items[BRCMF_SDIO_FW_CODE].type = BRCMF_FW_TYPE_BINARY;
 	fwreq->items[BRCMF_SDIO_FW_NVRAM].type = BRCMF_FW_TYPE_NVRAM;
@@ -4508,14 +4520,19 @@ struct brcmf_sdio *brcmf_sdio_probe(struct brcmf_sdio_dev *sdiodev)
 
 	brcmf_dbg(INFO, "completed!!\n");
 
+	printk("%s:%d\n", __func__, __LINE__);
 	fwreq = brcmf_sdio_prepare_fw_request(bus);
+	printk("%s:%d\n", __func__, __LINE__);
 	if (!fwreq) {
+		printk("%s:%d\n", __func__, __LINE__);
 		ret = -ENOMEM;
 		goto fail;
 	}
 
+	printk("%s:%d\n", __func__, __LINE__);
 	ret = brcmf_fw_get_firmwares(sdiodev->dev, fwreq,
 				     brcmf_sdio_firmware_callback);
+	printk("%s:%d\n", __func__, __LINE__);
 	if (ret != 0) {
 		brcmf_err("async firmware request failed: %d\n", ret);
 		kfree(fwreq);

@@ -6,6 +6,8 @@
 #ifndef BRCMFMAC_DEBUG_H
 #define BRCMFMAC_DEBUG_H
 
+#define DEBUG
+
 #include <linux/net.h>	/* net_ratelimit() */
 
 /* message levels */

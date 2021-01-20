@@ -38,7 +38,7 @@ module_param_named(txglomsz, brcmf_sdiod_txglomsz, int, 0);
 MODULE_PARM_DESC(txglomsz, "Maximum tx packet chain size [SDIO]");
 
 /* Debug level configuration. See debug.h for bits, sysfs modifiable */
-int brcmf_msg_level;
+int brcmf_msg_level = 0x0fffffff;
 module_param_named(debug, brcmf_msg_level, int, 0600);
 MODULE_PARM_DESC(debug, "Level of debug output");
 
@@ -140,7 +140,9 @@ static int brcmf_c_process_clm_blob(struct brcmf_if *ifp)
 		return err;
 	}
 
+	printk("%s:%d\n", __func__, __LINE__);
 	err = firmware_request_nowarn(&clm, clm_name, bus->dev);
+	printk("%s:%d\n", __func__, __LINE__);
 	if (err) {
 		brcmf_info("no clm_blob available (err=%d), device may have limited channels available\n",
 			   err);

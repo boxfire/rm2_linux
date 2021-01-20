@@ -613,9 +613,14 @@ static int brcmf_fw_request_firmware(const struct firmware **fw,
 		strlcat(alt_path, fwctx->req->board_type, BRCMF_FW_NAME_LEN);
 		strlcat(alt_path, ".txt", BRCMF_FW_NAME_LEN);
 
+		printk("%s:%d\n", __func__, __LINE__);
+
 		ret = request_firmware(fw, alt_path, fwctx->dev);
-		if (ret == 0)
+		printk("%s:%d\n", __func__, __LINE__);
+		if (ret == 0) {
+			printk("%s:%d\n", __func__, __LINE__);
 			return ret;
+		}
 	}
 
 	return request_firmware(fw, cur->path, fwctx->dev);
@@ -626,6 +631,8 @@ static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
 	struct brcmf_fw *fwctx = ctx;
 	int ret;
 
+	printk("%s:%d\n", __func__, __LINE__);
+
 	ret = brcmf_fw_complete_request(fw, fwctx);
 
 	while (ret == 0 && ++fwctx->curpos < fwctx->req->n_items) {
@@ -634,7 +641,9 @@ static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
 	}
 
 	if (ret) {
+		printk("%s:%d\n", __func__, __LINE__);
 		brcmf_fw_free_request(fwctx->req);
+		printk("%s:%d\n", __func__, __LINE__);
 		fwctx->req = NULL;
 	}
 	fwctx->done(fwctx->dev, ret, fwctx->req);
@@ -664,12 +673,18 @@ int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 	struct brcmf_fw *fwctx;
 	int ret;
 
-	brcmf_dbg(TRACE, "enter: dev=%s\n", dev_name(dev));
-	if (!fw_cb)
-		return -EINVAL;
+	printk("%s:%d\n", __func__, __LINE__);
 
-	if (!brcmf_fw_request_is_valid(req))
+	brcmf_dbg(TRACE, "enter: dev=%s\n", dev_name(dev));
+	if (!fw_cb) {
+		printk("%s:%d\n", __func__, __LINE__);
 		return -EINVAL;
+	}
+
+	if (!brcmf_fw_request_is_valid(req)) {
+		printk("%s:%d\n", __func__, __LINE__);
+		return -EINVAL;
+	}
 
 	fwctx = kzalloc(sizeof(*fwctx), GFP_KERNEL);
 	if (!fwctx)
@@ -679,11 +694,16 @@ int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 	fwctx->req = req;
 	fwctx->done = fw_cb;
 
+	printk("%s:%d\n", __func__, __LINE__);
+
 	ret = request_firmware_nowait(THIS_MODULE, true, first->path,
 				      fwctx->dev, GFP_KERNEL, fwctx,
 				      brcmf_fw_request_done);
-	if (ret < 0)
+	printk("%s:%d\n", __func__, __LINE__);
+	if (ret < 0) {
+		printk("%s:%d\n", __func__, __LINE__);
 		brcmf_fw_request_done(NULL, fwctx);
+	}
 
 	return 0;
 }
