@@ -13,6 +13,7 @@
 #include <linux/irq.h>
 #include <linux/input/touchscreen.h>
 #include <linux/interrupt.h>
+#include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/of.h>
 #include <asm/unaligned.h>
@@ -56,6 +57,7 @@ struct wacom_i2c {
 	struct i2c_client *client;
 	struct input_dev *input;
 	struct touchscreen_properties props;
+	struct regulator *vdd;
 	u8 data[WACOM_QUERY_SIZE];
 	bool prox;
 	int tool;
@@ -203,9 +205,27 @@ static int wacom_i2c_probe(struct i2c_client *client,
 	struct wacom_features features = { 0 };
 	int error;
 
+	wac_i2c = kzalloc(sizeof(*wac_i2c), GFP_KERNEL);
+	if (!wac_i2c)
+		return -ENOMEM;
+
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		dev_err(&client->dev, "i2c_check_functionality error\n");
 		return -EIO;
+	}
+
+	wac_i2c->vdd = regulator_get(&client->dev, "vdd");
+	if (IS_ERR(wac_i2c->vdd)) {
+		error = PTR_ERR(wac_i2c->vdd);
+		kfree(wac_i2c);
+		return error;
+	}
+
+	error = regulator_enable(wac_i2c->vdd);
+	if (error) {
+		regulator_put(wac_i2c->vdd);
+		kfree(wac_i2c);
+		return error;
 	}
 
 	error = wacom_query_device(client, &features);
@@ -275,6 +295,8 @@ static int wacom_i2c_probe(struct i2c_client *client,
 err_free_irq:
 	free_irq(client->irq, wac_i2c);
 err_free_mem:
+	regulator_disable(wac_i2c->vdd);
+	regulator_put(wac_i2c->vdd);
 	input_free_device(input);
 	kfree(wac_i2c);
 
