@@ -120,22 +120,29 @@ static int mxsfb_attach_bridge(struct mxsfb_drm_private *mxsfb)
 
 	ret = drm_of_find_panel_or_bridge(drm->dev->of_node, 0, 0, &panel,
 					  &bridge);
-	if (ret)
+	if (ret) {
 		return ret;
-
-	if (panel) {
-		bridge = devm_drm_panel_bridge_add_typed(drm->dev, panel,
-							 DRM_MODE_CONNECTOR_DPI);
-		if (IS_ERR(bridge))
-			return PTR_ERR(bridge);
 	}
 
-	if (!bridge)
+	if (panel) {
+		dev_err(drm->dev, "Found a panel\n");
+		bridge = devm_drm_panel_bridge_add_typed(drm->dev, panel,
+							 DRM_MODE_CONNECTOR_DPI);
+		if (IS_ERR(bridge)) {
+			return PTR_ERR(bridge);
+		}
+	}
+
+	if (!bridge) {
+		printk("THREE\n");
 		return -ENODEV;
+	}
 
 	ret = drm_bridge_attach(&mxsfb->encoder, bridge, NULL, 0);
-	if (ret)
+	if (ret) {
+		printk("FOUR\n");
 		return dev_err_probe(drm->dev, ret, "Failed to attach bridge\n");
+	}
 
 	mxsfb->bridge = bridge;
 
@@ -221,6 +228,7 @@ static int mxsfb_load(struct drm_device *drm,
 	drm->mode_config.funcs		= &mxsfb_mode_config_funcs;
 	drm->mode_config.helper_private	= &mxsfb_mode_config_helpers;
 
+	dev_err(drm->dev, "Configure/reset DRM\n");
 	drm_mode_config_reset(drm);
 
 	pm_runtime_get_sync(drm->dev);
@@ -237,6 +245,8 @@ static int mxsfb_load(struct drm_device *drm,
 	platform_set_drvdata(pdev, drm);
 
 	drm_helper_hpd_irq_event(drm);
+
+	dev_err(drm->dev, "Finished DRM\n");
 
 	return 0;
 

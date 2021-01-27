@@ -618,7 +618,7 @@ BRCMF_FW_DEF(43430A0, "brcmfmac43430a0-sdio");
 /* Note the names are not postfixed with a1 for backward compatibility */
 BRCMF_FW_DEF(43430A1, "brcmfmac43430-sdio");
 BRCMF_FW_DEF(43455, "brcmfmac43455-sdio");
-BRCMF_FW_DEF(43456, "brcmfmac43456-sdio");
+BRCMF_FW_DEF(43456, "brcmfmac43455-sdio");
 BRCMF_FW_DEF(4354, "brcmfmac4354-sdio");
 BRCMF_FW_DEF(4356, "brcmfmac4356-sdio");
 BRCMF_FW_DEF(4359, "brcmfmac4359-sdio");
@@ -644,8 +644,8 @@ static const struct brcmf_firmware_mapping brcmf_sdio_fwnames[] = {
 	BRCMF_FW_ENTRY(BRCM_CC_4339_CHIP_ID, 0xFFFFFFFF, 4339),
 	BRCMF_FW_ENTRY(BRCM_CC_43430_CHIP_ID, 0x00000001, 43430A0),
 	BRCMF_FW_ENTRY(BRCM_CC_43430_CHIP_ID, 0xFFFFFFFE, 43430A1),
-	BRCMF_FW_ENTRY(BRCM_CC_4345_CHIP_ID, 0x00000200, 43456),
 	BRCMF_FW_ENTRY(BRCM_CC_4345_CHIP_ID, 0xFFFFFDC0, 43455),
+	BRCMF_FW_ENTRY(BRCM_CC_4345_CHIP_ID, 0x00000200, 43456),
 	BRCMF_FW_ENTRY(BRCM_CC_4354_CHIP_ID, 0xFFFFFFFF, 4354),
 	BRCMF_FW_ENTRY(BRCM_CC_4356_CHIP_ID, 0xFFFFFFFF, 4356),
 	BRCMF_FW_ENTRY(BRCM_CC_4359_CHIP_ID, 0xFFFFFFFF, 4359),
@@ -4127,16 +4127,16 @@ int brcmf_sdio_get_fwname(struct device *dev, const char *ext, u8 *fw_name)
 		{ ext, fw_name },
 	};
 
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d: %d\n", __func__, __LINE__, ARRAY_SIZE(brcmf_sdio_fwnames));
 
 	fwreq = brcmf_fw_alloc_request(bus_if->chip, bus_if->chiprev,
 				       brcmf_sdio_fwnames,
 				       ARRAY_SIZE(brcmf_sdio_fwnames),
 				       fwnames, ARRAY_SIZE(fwnames));
 
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d\n", __func__, __LINE__);
 	if (!fwreq) {
-		printk("%s:%d\n", __func__, __LINE__);
+		brcmf_info("%s:%d\n", __func__, __LINE__);
 		return -ENOMEM;
 	}
 
@@ -4412,16 +4412,16 @@ brcmf_sdio_prepare_fw_request(struct brcmf_sdio *bus)
 		{ ".txt", bus->sdiodev->nvram_name },
 	};
 
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%d: '%s': '%s': %d\n", __LINE__, bus->sdiodev->fw_name, bus->sdiodev->nvram_name, ARRAY_SIZE(brcmf_sdio_fwnames));
 
 	fwreq = brcmf_fw_alloc_request(bus->ci->chip, bus->ci->chiprev,
 				       brcmf_sdio_fwnames,
 				       ARRAY_SIZE(brcmf_sdio_fwnames),
 				       fwnames, ARRAY_SIZE(fwnames));
 
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d\n", __func__, __LINE__);
 	if (!fwreq) {
-		printk("%s:%d\n", __func__, __LINE__);
+		brcmf_info("%s:%d\n", __func__, __LINE__);
 		return NULL;
 	}
 
@@ -4520,19 +4520,19 @@ struct brcmf_sdio *brcmf_sdio_probe(struct brcmf_sdio_dev *sdiodev)
 
 	brcmf_dbg(INFO, "completed!!\n");
 
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d\n", __func__, __LINE__);
 	fwreq = brcmf_sdio_prepare_fw_request(bus);
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d\n", __func__, __LINE__);
 	if (!fwreq) {
-		printk("%s:%d\n", __func__, __LINE__);
+		brcmf_info("%s:%d\n", __func__, __LINE__);
 		ret = -ENOMEM;
 		goto fail;
 	}
 
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d\n", __func__, __LINE__);
 	ret = brcmf_fw_get_firmwares(sdiodev->dev, fwreq,
 				     brcmf_sdio_firmware_callback);
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d\n", __func__, __LINE__);
 	if (ret != 0) {
 		brcmf_err("async firmware request failed: %d\n", ret);
 		kfree(fwreq);

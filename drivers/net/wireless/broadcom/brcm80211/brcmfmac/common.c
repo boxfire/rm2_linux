@@ -239,6 +239,8 @@ int brcmf_c_preinit_dcmds(struct brcmf_if *ifp)
 		ri->chippkg = le32_to_cpu(revinfo.chippkg);
 		ri->nvramrev = le32_to_cpu(revinfo.nvramrev);
 
+		brcmf_info("0x%x; 0x%x\n", revinfo.chipnum, revinfo.chiprev);
+
 		/* use revinfo if not known yet */
 		if (!bus->chip) {
 			bus->chip = le32_to_cpu(revinfo.chipnum);

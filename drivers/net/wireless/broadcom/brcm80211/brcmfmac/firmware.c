@@ -613,12 +613,12 @@ static int brcmf_fw_request_firmware(const struct firmware **fw,
 		strlcat(alt_path, fwctx->req->board_type, BRCMF_FW_NAME_LEN);
 		strlcat(alt_path, ".txt", BRCMF_FW_NAME_LEN);
 
-		printk("%s:%d\n", __func__, __LINE__);
+		brcmf_info("%s:%d\n", __func__, __LINE__);
 
 		ret = request_firmware(fw, alt_path, fwctx->dev);
-		printk("%s:%d\n", __func__, __LINE__);
+		brcmf_info("%s:%d\n", __func__, __LINE__);
 		if (ret == 0) {
-			printk("%s:%d\n", __func__, __LINE__);
+			brcmf_info("%s:%d\n", __func__, __LINE__);
 			return ret;
 		}
 	}
@@ -631,7 +631,7 @@ static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
 	struct brcmf_fw *fwctx = ctx;
 	int ret;
 
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d\n", __func__, __LINE__);
 
 	ret = brcmf_fw_complete_request(fw, fwctx);
 
@@ -641,9 +641,9 @@ static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
 	}
 
 	if (ret) {
-		printk("%s:%d\n", __func__, __LINE__);
+		brcmf_info("%s:%d\n", __func__, __LINE__);
 		brcmf_fw_free_request(fwctx->req);
-		printk("%s:%d\n", __func__, __LINE__);
+		brcmf_info("%s:%d\n", __func__, __LINE__);
 		fwctx->req = NULL;
 	}
 	fwctx->done(fwctx->dev, ret, fwctx->req);
@@ -673,16 +673,16 @@ int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 	struct brcmf_fw *fwctx;
 	int ret;
 
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d\n", __func__, __LINE__);
 
 	brcmf_dbg(TRACE, "enter: dev=%s\n", dev_name(dev));
 	if (!fw_cb) {
-		printk("%s:%d\n", __func__, __LINE__);
+		brcmf_info("%s:%d\n", __func__, __LINE__);
 		return -EINVAL;
 	}
 
 	if (!brcmf_fw_request_is_valid(req)) {
-		printk("%s:%d\n", __func__, __LINE__);
+		brcmf_info("%s:%d\n", __func__, __LINE__);
 		return -EINVAL;
 	}
 
@@ -694,14 +694,14 @@ int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 	fwctx->req = req;
 	fwctx->done = fw_cb;
 
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d: %s\n", __func__, __LINE__, first->path);
 
 	ret = request_firmware_nowait(THIS_MODULE, true, first->path,
 				      fwctx->dev, GFP_KERNEL, fwctx,
 				      brcmf_fw_request_done);
-	printk("%s:%d\n", __func__, __LINE__);
+	brcmf_info("%s:%d\n", __func__, __LINE__);
 	if (ret < 0) {
-		printk("%s:%d\n", __func__, __LINE__);
+		brcmf_info("%s:%d\n", __func__, __LINE__);
 		brcmf_fw_request_done(NULL, fwctx);
 	}
 
@@ -721,13 +721,19 @@ brcmf_fw_alloc_request(u32 chip, u32 chiprev,
 	u32 i, j;
 	char end = '\0';
 
+	brcmf_info("chip: 0x%x; rev: 0x%lx\n", chip, BIT(chiprev));
+
 	for (i = 0; i < table_size; i++) {
+		brcmf_info("mapping_table[i].chipid: 0x%x; chip: 0x%x\n", mapping_table[i].chipid, chip);
+		brcmf_info("mapping_table[i].revmask: 0x%x; rev: 0x%lx\n", mapping_table[i].chipid, BIT(chiprev));
 		if (mapping_table[i].chipid == chip &&
 		    mapping_table[i].revmask & BIT(chiprev))
 			break;
 	}
 
 	brcmf_chip_name(chip, chiprev, chipname, sizeof(chipname));
+
+	brcmf_info("chipname: %s\n", chipname);
 
 	if (i == table_size) {
 		brcmf_err("Unknown chip %s\n", chipname);
@@ -765,6 +771,7 @@ brcmf_fw_alloc_request(u32 chip, u32 chiprev,
 			BRCMF_FW_NAME_LEN);
 		strlcat(fwnames[j].path, fwnames[j].extension,
 			BRCMF_FW_NAME_LEN);
+		brcmf_info("FW Path: %s", fwnames[j].path);
 		fwreq->items[j].path = fwnames[j].path;
 	}
 

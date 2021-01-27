@@ -6,7 +6,7 @@
 #ifndef BRCMFMAC_DEBUG_H
 #define BRCMFMAC_DEBUG_H
 
-#define DEBUG
+#define DEBUG 1
 
 #include <linux/net.h>	/* net_ratelimit() */
 
