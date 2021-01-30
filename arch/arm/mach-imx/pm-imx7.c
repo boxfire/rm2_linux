@@ -132,6 +132,12 @@
 #define M4_RCR_GO		0xAA
 #define M4_OCRAMS_RESERVED_SIZE	0xc
 
+#define SNVS_LPCR 0x38
+#define SNVS_LPCR_ON_TIME_MASK GENMASK(21, 20)
+#define SNVS_LPCR_ON_TIME_SHIFT 20
+#define SNVS_LPCR_ON_TIME_50MS 0x1
+#define SNVS_LPCR_ON_TIME_500MS 0x0
+
 extern unsigned long iram_tlb_base_addr;
 extern unsigned long iram_tlb_phys_addr;
 
@@ -157,7 +163,7 @@ static void __iomem *system_counter_cmp_base;
 static void __iomem *gpio1_base;
 static void (*imx7_suspend_in_ocram_fn)(void __iomem *ocram_vbase);
 struct imx7_cpu_pm_info *pm_info;
-static bool lpsr_enabled;
+static bool lpsr_enabled = true;
 static u32 iomuxc_gpr[MAX_IOMUXC_GPR];
 static u32 uart1_io[MAX_UART_IO];
 static u32 ccm_lpcg[MAX_CCM_LPCG];
@@ -390,6 +396,71 @@ static const char * const low_power_ocram_match[] __initconst = {
 	"fsl,lpm-sram",
 	NULL
 };
+
+#define CCGR_WDOG1	0x49c0
+#define CCGR_WDOG2	0x49d0
+#define CCGR_WDOG3	0x49e0
+#define CCGR_WDOG4	0x49f0
+#define ROOT_WDOG	0xbb80
+
+#define WDOG_WMCR	0x8
+
+static void __iomem *wdog1_base;
+static void __iomem *wdog2_base;
+static void __iomem *wdog3_base;
+static void __iomem *wdog4_base;
+
+static inline void disable_wdog_powerdown_single(int id)
+{
+	void __iomem *ccm_root, *ccm_ccgr, *wdog_wmcr;
+	u32 val_root, val_ccgr;
+
+	ccm_root = pm_info->ccm_base.vbase + ROOT_WDOG;
+
+	switch (id) {
+	case 0:
+		ccm_ccgr = pm_info->ccm_base.vbase + CCGR_WDOG1;
+		wdog_wmcr = wdog1_base + WDOG_WMCR;
+		break;
+	case 1:
+		ccm_ccgr = pm_info->ccm_base.vbase + CCGR_WDOG2;
+		wdog_wmcr = wdog2_base + WDOG_WMCR;
+		break;
+	case 2:
+		ccm_ccgr = pm_info->ccm_base.vbase + CCGR_WDOG3;
+		wdog_wmcr = wdog3_base + WDOG_WMCR;
+		break;
+	case 3:
+		ccm_ccgr = pm_info->ccm_base.vbase + CCGR_WDOG4;
+		wdog_wmcr = wdog4_base + WDOG_WMCR;
+		break;
+	default:
+		return;
+	}
+
+	/* Save WDOG clock states */
+	val_root = readl_relaxed(ccm_root);
+	val_ccgr = readl_relaxed(ccm_ccgr);
+
+	/* Turn on WDOG root and ccgr clock */
+	writel_relaxed(val_root | BIT(28), ccm_root);
+	writel_relaxed(0x3, ccm_ccgr);
+
+	/* Clear powerdown bit */
+	writew_relaxed(0, wdog_wmcr);
+
+	/* Restore WDOG clock states */
+	writel_relaxed(val_ccgr, ccm_ccgr);
+	writel_relaxed(val_root, ccm_root);
+}
+
+static void imx7_disable_wdog_powerdown(void)
+{
+	disable_wdog_powerdown_single(0);
+	disable_wdog_powerdown_single(1);
+	disable_wdog_powerdown_single(2);
+	disable_wdog_powerdown_single(3);
+}
 
 static void imx7_gpio_save(void)
 {
@@ -719,9 +790,121 @@ static int imx7_pm_is_resume_from_lpsr(void)
 	return readl_relaxed(lpsr_base);
 }
 
-static int imx7_pm_enter(suspend_state_t state)
+static void imx7_lpsr_tweaks_enable(bool lpsr_enable)
+{
+	u32 val;
+
+	/*
+	 * To get GPIO1/2 LPSR wakeup work,
+	 * set bit 7 of SNVS register 0x48.  Unfortunately, it brings us
+	 * a side effect, that is setting TOP (Turn off System Power) bit
+	 * of SNVS LPCR register results in an immediate reset instead of
+	 * power-off. To work around the issue, we only enable this when
+	 * entering LPSR sleep state.
+	 */
+	val = readl_relaxed(pm_info->snvs_base.vbase + 0x48);
+	val &= ~BIT(7);
+	val |= lpsr_enable ? BIT(7) : 0;
+	writel_relaxed(val, pm_info->snvs_base.vbase + 0x48);
+
+	/* Key press length, shorter keypress in LPSR sleep */
+	val = readl_relaxed(pm_info->snvs_base.vbase + SNVS_LPCR);
+	val &= ~SNVS_LPCR_ON_TIME_MASK;
+	val |= (lpsr_enable ? SNVS_LPCR_ON_TIME_50MS : SNVS_LPCR_ON_TIME_500MS)
+			<< SNVS_LPCR_ON_TIME_SHIFT;
+	writel_relaxed(val, pm_info->snvs_base.vbase + SNVS_LPCR);
+}
+
+static void imx7_pm_do_suspend(bool lpsr)
 {
 	unsigned int console_saved_reg[10] = {0};
+
+	imx_anatop_pre_suspend();
+	imx_gpcv2_pre_suspend(true);
+	if (imx_gpcv2_is_mf_mix_off()) {
+		/*
+		 * per design requirement, EXSC for PCIe/EIM/PXP
+		 * will need clock to recover RDC setting on
+		 * resume, so enable PCIe/EIM LPCG for RDC
+		 * recovery when M/F mix off
+		 */
+		writel_relaxed(0x3, pm_info->ccm_base.vbase +
+			CCM_EIM_LPCG);
+		writel_relaxed(0x3, pm_info->ccm_base.vbase +
+			CCM_PXP_LPCG);
+		writel_relaxed(0x3, pm_info->ccm_base.vbase +
+			CCM_PCIE_LPCG);
+		/* stop m4 if mix will also be shutdown */
+		if (imx_src_is_m4_enabled() && imx_mu_is_m4_in_stop()) {
+			writel(M4_RCR_HALT,
+				pm_info->src_base.vbase + M4RCR);
+			imx_gpcv2_enable_wakeup_for_m4();
+		}
+		imx7_console_save(console_saved_reg);
+		memcpy(ocram_saved_in_ddr, ocram_base, ocram_size);
+		if (lpsr) {
+			imx7_lpsr_tweaks_enable(true);
+			imx7_pm_set_lpsr_resume_addr(pm_info->resume_addr);
+			imx7_console_io_save();
+			memcpy(lpm_ocram_saved_in_ddr, lpm_ocram_base,
+				lpm_ocram_size);
+			imx7_iomuxc_gpr_save();
+			imx7_ccm_save();
+			imx7_gpt_save();
+			imx7_sys_counter_save();
+			imx7_gpio_save();
+		}
+	}
+
+	/* Zzz ... */
+	cpu_suspend(0, imx7_suspend_finish);
+
+	if (imx7_pm_is_resume_from_lpsr()) {
+		imx7_console_io_restore();
+		memcpy(lpm_ocram_base, lpm_ocram_saved_in_ddr,
+			lpm_ocram_size);
+		imx7_iomuxc_gpr_restore();
+		imx7_ccm_restore();
+		imx7_gpt_restore();
+		imx7_sys_counter_restore();
+		imx7_gpio_restore();
+		imx7d_enable_rcosc();
+		imx7_disable_wdog_powerdown();
+		imx7_lpsr_tweaks_enable(false);
+	}
+	if (imx_gpcv2_is_mf_mix_off() ||
+		imx7_pm_is_resume_from_lpsr()) {
+		writel_relaxed(0x0, pm_info->ccm_base.vbase +
+			CCM_EIM_LPCG);
+		writel_relaxed(0x0, pm_info->ccm_base.vbase +
+			CCM_PXP_LPCG);
+		writel_relaxed(0x0, pm_info->ccm_base.vbase +
+			CCM_PCIE_LPCG);
+		memcpy(ocram_base, ocram_saved_in_ddr, ocram_size);
+		imx7_console_restore(console_saved_reg);
+		if (imx_src_is_m4_enabled() && imx_mu_is_m4_in_stop()) {
+			imx_gpcv2_disable_wakeup_for_m4();
+			/* restore M4 image */
+			memcpy(lpm_m4tcm_base,
+			    lpm_m4tcm_saved_in_ddr, SZ_32K);
+			/* kick m4 to enable */
+			writel(M4_RCR_GO,
+				pm_info->src_base.vbase + M4RCR);
+			/* offset high bus count for m4 image */
+			request_bus_freq(BUS_FREQ_HIGH);
+			/* restore M4 to run mode */
+			imx_mu_set_m4_run_mode();
+			/* gpc wakeup */
+		}
+	}
+	/* clear LPSR resume address */
+	imx7_pm_set_lpsr_resume_addr(0);
+	imx_anatop_post_resume();
+	imx_gpcv2_post_resume();
+}
+
+static int imx7_pm_enter(suspend_state_t state)
+{
 	u32 val;
 
 	if (!iram_tlb_base_addr) {
@@ -752,98 +935,10 @@ static int imx7_pm_enter(suspend_state_t state)
 
 	switch (state) {
 	case PM_SUSPEND_STANDBY:
-		imx_anatop_pre_suspend();
-		imx_gpcv2_pre_suspend(false);
-
-		/* Zzz ... */
-		if (psci_ops.cpu_suspend)
-			cpu_suspend(1, imx7_suspend_finish);
-		else
-			imx7_suspend_in_ocram_fn(suspend_ocram_base);
-
-		imx_anatop_post_resume();
-		imx_gpcv2_post_resume();
+		imx7_pm_do_suspend(false);
 		break;
 	case PM_SUSPEND_MEM:
-		imx_anatop_pre_suspend();
-		imx_gpcv2_pre_suspend(true);
-		if (imx_gpcv2_is_mf_mix_off()) {
-			/*
-			 * per design requirement, EXSC for PCIe/EIM/PXP
-			 * will need clock to recover RDC setting on
-			 * resume, so enable PCIe/EIM LPCG for RDC
-			 * recovery when M/F mix off
-			 */
-			writel_relaxed(0x3, pm_info->ccm_base.vbase +
-				CCM_EIM_LPCG);
-			writel_relaxed(0x3, pm_info->ccm_base.vbase +
-				CCM_PXP_LPCG);
-			writel_relaxed(0x3, pm_info->ccm_base.vbase +
-				CCM_PCIE_LPCG);
-			/* stop m4 if mix will also be shutdown */
-			if (imx_src_is_m4_enabled() && imx_mu_is_m4_in_stop()) {
-				writel(M4_RCR_HALT,
-					pm_info->src_base.vbase + M4RCR);
-				imx_gpcv2_enable_wakeup_for_m4();
-			}
-			imx7_console_save(console_saved_reg);
-			memcpy(ocram_saved_in_ddr, ocram_base, ocram_size);
-			if (lpsr_enabled) {
-				imx7_pm_set_lpsr_resume_addr(pm_info->resume_addr);
-				imx7_console_io_save();
-				memcpy(lpm_ocram_saved_in_ddr, lpm_ocram_base,
-					lpm_ocram_size);
-				imx7_iomuxc_gpr_save();
-				imx7_ccm_save();
-				imx7_gpt_save();
-				imx7_sys_counter_save();
-				imx7_gpio_save();
-			}
-		}
-
-		/* Zzz ... */
-		cpu_suspend(0, imx7_suspend_finish);
-
-		if (imx7_pm_is_resume_from_lpsr()) {
-			imx7_console_io_restore();
-			memcpy(lpm_ocram_base, lpm_ocram_saved_in_ddr,
-				lpm_ocram_size);
-			imx7_iomuxc_gpr_restore();
-			imx7_ccm_restore();
-			imx7_gpt_restore();
-			imx7_sys_counter_restore();
-			imx7_gpio_restore();
-			imx7d_enable_rcosc();
-		}
-		if (imx_gpcv2_is_mf_mix_off() ||
-			imx7_pm_is_resume_from_lpsr()) {
-			writel_relaxed(0x0, pm_info->ccm_base.vbase +
-				CCM_EIM_LPCG);
-			writel_relaxed(0x0, pm_info->ccm_base.vbase +
-				CCM_PXP_LPCG);
-			writel_relaxed(0x0, pm_info->ccm_base.vbase +
-				CCM_PCIE_LPCG);
-			memcpy(ocram_base, ocram_saved_in_ddr, ocram_size);
-			imx7_console_restore(console_saved_reg);
-			if (imx_src_is_m4_enabled() && imx_mu_is_m4_in_stop()) {
-				imx_gpcv2_disable_wakeup_for_m4();
-				/* restore M4 image */
-				memcpy(lpm_m4tcm_base,
-				    lpm_m4tcm_saved_in_ddr, SZ_32K);
-				/* kick m4 to enable */
-				writel(M4_RCR_GO,
-					pm_info->src_base.vbase + M4RCR);
-				/* offset high bus count for m4 image */
-				request_bus_freq(BUS_FREQ_HIGH);
-				/* restore M4 to run mode */
-				imx_mu_set_m4_run_mode();
-				/* gpc wakeup */
-			}
-		}
-		/* clear LPSR resume address */
-		imx7_pm_set_lpsr_resume_addr(0);
-		imx_anatop_post_resume();
-		imx_gpcv2_post_resume();
+		imx7_pm_do_suspend(true);
 		break;
 	default:
 		return -EINVAL;
@@ -1159,15 +1254,12 @@ void __init imx7d_pm_init(void)
 		/* save M4 Image to DDR */
 		memcpy(lpm_m4tcm_saved_in_ddr, lpm_m4tcm_base, SZ_32K);
 	}
-	np = of_find_compatible_node(NULL, NULL, "fsl,lpm-sram");
-	if (of_get_property(np, "fsl,enable-lpsr", NULL))
-		lpsr_enabled = true;
 
 	if (psci_ops.cpu_suspend)
 		lpsr_enabled = false;
 
 	if (lpsr_enabled) {
-		pr_info("LPSR mode enabled, DSM will go into LPSR mode!\n");
+		np = of_find_compatible_node(NULL, NULL, "fsl,lpm-sram");
 		lpm_ocram_base = of_iomap(np, 0);
 		WARN_ON(!lpm_ocram_base);
 		WARN_ON(of_address_to_resource(np, 0, &res));
@@ -1198,6 +1290,30 @@ void __init imx7d_pm_init(void)
 		if (np)
 			gpio1_base = of_iomap(np, 0);
 		WARN_ON(!gpio1_base);
+
+		np = of_find_node_by_path(
+			"/soc/aips-bus@30000000/wdog@30280000");
+		if (np)
+			wdog1_base = of_iomap(np, 0);
+		WARN_ON(!wdog1_base);
+
+		np = of_find_node_by_path(
+			"/soc/aips-bus@30000000/wdog@30290000");
+		if (np)
+			wdog2_base = of_iomap(np, 0);
+		WARN_ON(!wdog2_base);
+
+		np = of_find_node_by_path(
+			"/soc/aips-bus@30000000/wdog@302a0000");
+		if (np)
+			wdog3_base = of_iomap(np, 0);
+		WARN_ON(!wdog3_base);
+
+		np = of_find_node_by_path(
+			"/soc/aips-bus@30000000/wdog@302b0000");
+		if (np)
+			wdog4_base = of_iomap(np, 0);
+		WARN_ON(!wdog4_base);
 	}
 
 	np = of_find_node_by_path(

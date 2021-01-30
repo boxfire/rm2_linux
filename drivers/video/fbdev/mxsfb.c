@@ -252,6 +252,7 @@ struct mxsfb_info {
 	unsigned dotclk_delay;
 	const struct mxsfb_devdata *devdata;
 	struct regulator *reg_lcd;
+	struct regulator *reg_lcd2;
 	bool wait4vsync;
 	struct completion vsync_complete;
 	struct completion flip_complete;
@@ -268,6 +269,8 @@ struct mxsfb_info {
 #ifdef CONFIG_FB_MXC_OVERLAY
 	struct mxsfb_layer overlay;
 #endif
+
+	bool prevent_frying_pan;
 };
 
 #define mxsfb_is_v3(host) (host->devdata->ipversion == 3)
@@ -667,7 +670,7 @@ static int mxsfb_check_var(struct fb_var_screeninfo *var,
 	return 0;
 }
 
-static void mxsfb_enable_controller(struct fb_info *fb_info)
+static int mxsfb_enable_controller(struct fb_info *fb_info)
 {
 	struct mxsfb_info *host = fb_info->par;
 	u32 reg;
@@ -683,7 +686,7 @@ static void mxsfb_enable_controller(struct fb_info *fb_info)
 		if (ret < 0) {
 			dev_err(&host->pdev->dev, "failed to setup"
 				"dispdrv:%s\n", host->dispdrv->drv->name);
-			return;
+			return ret;
 		}
 		host->sync = fb_info->var.sync;
 	}
@@ -693,7 +696,16 @@ static void mxsfb_enable_controller(struct fb_info *fb_info)
 		if (ret) {
 			dev_err(&host->pdev->dev,
 				"lcd regulator enable failed:	%d\n", ret);
-			return;
+			return ret;
+		}
+	}
+
+	if (host->reg_lcd2) {
+		ret = regulator_enable(host->reg_lcd2);
+		if (ret) {
+			dev_err(&host->pdev->dev,
+				"lcd2 regulator enable failed:	%d\n", ret);
+			return ret;
 		}
 	}
 
@@ -725,7 +737,14 @@ static void mxsfb_enable_controller(struct fb_info *fb_info)
 						"lcd regulator disable failed: %d\n",
 						ret);
 			}
-			return;
+			if (host->reg_lcd2) {
+				ret = regulator_disable(host->reg_lcd2);
+				if (ret)
+					dev_err(&host->pdev->dev,
+						"lcd2 regulator disable failed: %d\n",
+						ret);
+			}
+			return ret;
 		}
 		clk_enable_pix(host);
 #ifdef CONFIG_FB_IMX64_DEBUG
@@ -752,6 +771,7 @@ static void mxsfb_enable_controller(struct fb_info *fb_info)
 
 	host->enabled = 1;
 
+	return 0;
 }
 
 static void mxsfb_disable_controller(struct fb_info *fb_info)
@@ -794,6 +814,12 @@ static void mxsfb_disable_controller(struct fb_info *fb_info)
 		if (ret)
 			dev_err(&host->pdev->dev,
 				"lcd regulator disable failed: %d\n", ret);
+	}
+	if (host->reg_lcd2) {
+		ret = regulator_disable(host->reg_lcd2);
+		if (ret)
+			dev_err(&host->pdev->dev,
+				"lcd2 regulator disable failed: %d\n", ret);
 	}
 }
 
@@ -966,6 +992,9 @@ static int mxsfb_set_par(struct fb_info *fb_info)
 	writel(fb_info->fix.smem_start +
 			fb_info->fix.line_length * fb_info->var.yoffset,
 			host->base + host->devdata->next_buf);
+	writel(fb_info->fix.smem_start +
+			fb_info->fix.line_length * fb_info->var.yoffset,
+			host->base + host->devdata->cur_buf);
 
 	if (reenable)
 		mxsfb_enable_controller(fb_info);
@@ -1066,11 +1095,14 @@ static int mxsfb_ioctl(struct fb_info *fb_info, unsigned int cmd,
 static int mxsfb_blank(int blank, struct fb_info *fb_info)
 {
 	struct mxsfb_info *host = fb_info->par;
+	int ret = 0;
+	int prev_blank;
 
 #ifdef CONFIG_FB_IMX64_DEBUG
 	return 0;
 #endif
 
+	prev_blank = host->cur_blank;
 	host->cur_blank = blank;
 
 	switch (blank) {
@@ -1101,11 +1133,13 @@ static int mxsfb_blank(int blank, struct fb_info *fb_info)
 
 			writel(0, host->base + LCDC_CTRL);
 			mxsfb_set_par(host->fb_info);
-			mxsfb_enable_controller(fb_info);
+			ret = mxsfb_enable_controller(fb_info);
+			if (ret)
+				host->cur_blank = prev_blank;
 		}
 		break;
 	}
-	return 0;
+	return ret;
 }
 
 static int mxsfb_pan_display(struct fb_var_screeninfo *var,
@@ -1143,13 +1177,21 @@ static int mxsfb_pan_display(struct fb_var_screeninfo *var,
 		host->base + LCDC_CTRL1 + REG_SET);
 
 	ret = wait_for_completion_timeout(&host->flip_complete, HZ / 2);
+
 	if (!ret) {
 		dev_err(fb_info->device,
 			"mxs wait for pan flip timeout\n");
-		return -ETIMEDOUT;
+		ret = -ETIMEDOUT;
 	}
 
-	return 0;
+	if (host->prevent_frying_pan) {
+		/* Next frame will be the zero frame (last frame in buffer) by default. */
+		offset = fb_info->fix.line_length * (var->yres_virtual - var->yres);
+		writel(fb_info->fix.smem_start + offset,
+				host->base + host->devdata->next_buf);
+	}
+
+	return ret;
 }
 
 static int mxsfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
@@ -2235,6 +2277,34 @@ static int mxsfb_probe(struct platform_device *pdev)
 	host->fb_info = fb_info;
 	fb_info->par = host;
 
+	host->reg_lcd = devm_regulator_get(&pdev->dev, "lcd");
+	if (IS_ERR(host->reg_lcd)) {
+		ret = PTR_ERR(host->reg_lcd);
+		if (ret == -EPROBE_DEFER) {
+			dev_warn(&pdev->dev, "lcd-supply not ready, deferring\n");
+			goto fb_release;
+		} else {
+			dev_err(&pdev->dev,
+					"Failed to get lcd-supply (errno %d), ignoring\n",
+					ret);
+			host->reg_lcd = NULL;
+		}
+	}
+
+	host->reg_lcd2 = devm_regulator_get(&pdev->dev, "lcd2");
+	if (IS_ERR(host->reg_lcd2)) {
+		ret = PTR_ERR(host->reg_lcd2);
+		if (ret == -EPROBE_DEFER) {
+			dev_warn(&pdev->dev, "lcd2-supply not ready, deferring\n");
+			goto fb_release;
+		} else {
+			dev_err(&pdev->dev,
+					"Failed to get lcd2-supply (errno %d), ignoring\n",
+					ret);
+			host->reg_lcd2 = NULL;
+		}
+	}
+
 	ret = devm_request_irq(&pdev->dev, irq, mxsfb_irq_handler, 0,
 			  dev_name(&pdev->dev), host);
 	if (ret) {
@@ -2278,10 +2348,6 @@ static int mxsfb_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to get disp_axi clock: %d\n", ret);
 		goto fb_release;
 	}
-
-	host->reg_lcd = devm_regulator_get(&pdev->dev, "lcd");
-	if (IS_ERR(host->reg_lcd))
-		host->reg_lcd = NULL;
 
 	fb_info->pseudo_palette = devm_kcalloc(&pdev->dev, 16, sizeof(u32),
 					       GFP_KERNEL);
@@ -2331,6 +2397,10 @@ static int mxsfb_probe(struct platform_device *pdev)
 	}
 
 	mxsfb_overlay_init(host);
+
+	host->prevent_frying_pan = of_property_read_bool(pdev->dev.of_node, "prevent-frying-pan");
+	if (host->prevent_frying_pan)
+		dev_info(&pdev->dev, "Driver set to prevent frying pan mode\n");
 
 #ifndef CONFIG_FB_IMX64_DEBUG
 	console_lock();

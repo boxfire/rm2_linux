@@ -204,6 +204,11 @@ config REGULATOR_BD718XX
 
 	  This driver can also be built as a module. If so, the module
 	  will be called bd718x7-regulator.
+config REGULATOR_BD7181X
+	tristate "RoHM BD71815/BD71817 Power Regulator"
+	depends on MFD_BD7181X
+	help
+	  This driver supports BD71815/BD71817 voltage regulator chips.
 
 config REGULATOR_BD9571MWV
 	tristate "ROHM BD9571MWV Regulators"
@@ -575,6 +580,13 @@ config REGULATOR_MAX77802
 	  Exynos5420/Exynos5800 SoCs to control various voltages.
 	  It includes support for control of voltage and ramp speed.
 
+config REGULATOR_MAX77818
+	tristate "Maxim MAX77818 voltage regulator"
+	depends on MFD_MAX77818
+	depends on I2C
+	help
+		Say y here to support the regulator found in the Maxime Semiconductor MAX77818 multi-function device
+
 config REGULATOR_MC13XXX_CORE
 	tristate
 
@@ -877,6 +889,12 @@ config REGULATOR_STM32_BOOSTER
 
 	  This driver can also be built as a module. If so, the module
 	  will be called stm32-booster.
+
+config REGULATOR_SY7636A
+	tristate "Silergy SY7636A voltage regulator"
+	depends on MFD_SY7636A
+	help
+	  This driver supports Silergy SY3686A voltage regulator.
 
 config REGULATOR_STM32_VREFBUF
 	tristate "STMicroelectronics STM32 VREFBUF"
