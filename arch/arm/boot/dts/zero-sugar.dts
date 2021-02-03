@@ -187,6 +187,10 @@
 	status = "disabled";
 };
 
+&snvs_pwrkey {
+	status = "okay";
+};
+
 &i2c1 {
 	clock-frequency = <400000>;
 	pinctrl-names = "default", "sleep";
