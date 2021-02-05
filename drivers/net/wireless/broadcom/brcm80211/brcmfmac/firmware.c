@@ -95,7 +95,7 @@ static enum nvram_parser_state brcmf_nvram_handle_idle(struct nvram_parser *nvp)
 		nvp->entry = nvp->pos;
 		return KEY;
 	}
-	brcmf_dbg(INFO, "warning: ln=%d:col=%d: ignoring invalid character\n",
+	brcmf_err("warning: ln=%d:col=%d: ignoring invalid character\n",
 		  nvp->line, nvp->column);
 proceed:
 	nvp->column++;
@@ -122,7 +122,7 @@ static enum nvram_parser_state brcmf_nvram_handle_key(struct nvram_parser *nvp)
 		if (strncmp(&nvp->data[nvp->entry], "boardrev", 8) == 0)
 			nvp->boardrev_found = true;
 	} else if (!is_nvram_char(c) || c == ' ') {
-		brcmf_dbg(INFO, "warning: ln=%d:col=%d: '=' expected, skip invalid key entry\n",
+		brcmf_err("warning: ln=%d:col=%d: '=' expected, skip invalid key entry\n",
 			  nvp->line, nvp->column);
 		return COMMENT;
 	}
@@ -529,7 +529,7 @@ static int brcmf_fw_request_nvram_done(const struct firmware *fw, void *ctx)
 	u8 *data = NULL;
 	size_t data_len;
 
-	brcmf_dbg(TRACE, "enter: dev=%s\n", dev_name(fwctx->dev));
+	brcmf_err("enter: dev=%s\n", dev_name(fwctx->dev));
 
 	cur = &fwctx->req->items[fwctx->curpos];
 
@@ -559,7 +559,7 @@ static int brcmf_fw_request_nvram_done(const struct firmware *fw, void *ctx)
 	if (!nvram && !(cur->flags & BRCMF_FW_REQF_OPTIONAL))
 		goto fail;
 
-	brcmf_dbg(TRACE, "nvram %p len %d\n", nvram, nvram_length);
+	brcmf_err("nvram %p len %d\n", nvram, nvram_length);
 	cur->nv_data.data = nvram;
 	cur->nv_data.len = nvram_length;
 	return 0;
@@ -574,7 +574,7 @@ static int brcmf_fw_complete_request(const struct firmware *fw,
 	struct brcmf_fw_item *cur = &fwctx->req->items[fwctx->curpos];
 	int ret = 0;
 
-	brcmf_dbg(TRACE, "firmware %s %sfound\n", cur->path, fw ? "" : "not ");
+	brcmf_err("firmware %s %sfound\n", cur->path, fw ? "" : "not ");
 
 	switch (cur->type) {
 	case BRCMF_FW_TYPE_NVRAM:
@@ -631,19 +631,23 @@ static void brcmf_fw_request_done(const struct firmware *fw, void *ctx)
 	struct brcmf_fw *fwctx = ctx;
 	int ret;
 
-	brcmf_info("%s:%d\n", __func__, __LINE__);
+	brcmf_err("%s:%d\n", __func__, __LINE__);
 
 	ret = brcmf_fw_complete_request(fw, fwctx);
+
+	brcmf_err("%s:%d: ret 1: %d\n", __func__, __LINE__, ret);
 
 	while (ret == 0 && ++fwctx->curpos < fwctx->req->n_items) {
 		brcmf_fw_request_firmware(&fw, fwctx);
 		ret = brcmf_fw_complete_request(fw, ctx);
 	}
 
+	brcmf_err("%s:%d: ret 2: %d\n", __func__, __LINE__, ret);
+
 	if (ret) {
-		brcmf_info("%s:%d\n", __func__, __LINE__);
+		brcmf_err("%s:%d\n", __func__, __LINE__);
 		brcmf_fw_free_request(fwctx->req);
-		brcmf_info("%s:%d\n", __func__, __LINE__);
+		brcmf_err("%s:%d\n", __func__, __LINE__);
 		fwctx->req = NULL;
 	}
 	fwctx->done(fwctx->dev, ret, fwctx->req);
@@ -675,7 +679,7 @@ int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 
 	brcmf_info("%s:%d\n", __func__, __LINE__);
 
-	brcmf_dbg(TRACE, "enter: dev=%s\n", dev_name(dev));
+	brcmf_err("enter: dev=%s\n", dev_name(dev));
 	if (!fw_cb) {
 		brcmf_info("%s:%d\n", __func__, __LINE__);
 		return -EINVAL;
