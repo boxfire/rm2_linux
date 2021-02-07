@@ -262,3 +262,4 @@ obj-$(CONFIG_MFD_ROHM_BD718XX)	+= rohm-bd718x7.o
 obj-$(CONFIG_MFD_STMFX) 	+= stmfx.o
 obj-$(CONFIG_MFD_PCA9450)       += pca9450.o
 
+obj-$(CONFIG_MFD_BD7181X)	+= bd7181x.o
